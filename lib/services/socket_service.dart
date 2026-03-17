@@ -4,7 +4,7 @@ import 'auth_service.dart';
 
 class SocketService {
   static final SocketService _instance = SocketService._internal();
-  factory SocketService() return _instance;
+  factory SocketService() => _instance;
   SocketService._internal();
 
   IO.Socket? _socket;
