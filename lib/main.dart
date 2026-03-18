@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'screens/chat_list_screen.dart';
+import 'screens/username_setup_screen.dart';
 import 'services/auth_service.dart';
+import 'models/user_model.dart';
 
 void main() {
   runApp(const AkonaChatApp());
@@ -33,7 +35,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
   bool _isLoading = true;
-  bool _isAuthenticated = false;
+  UserModel? _user;
 
   @override
   void initState() {
@@ -45,7 +47,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final user = await _authService.loadUser();
     if (mounted) {
       setState(() {
-        _isAuthenticated = user != null;
+        _user = user;
         _isLoading = false;
       });
     }
@@ -60,6 +62,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
         ),
       );
     }
-    return _isAuthenticated ? ChatListScreen() : LoginScreen();
+    
+    if (_user == null) {
+      return LoginScreen();
+    }
+
+    // Check if username is missing
+    if (_user!.username == null || _user!.username!.isEmpty) {
+      return UsernameSetupScreen();
+    }
+
+    return ChatListScreen();
   }
 }

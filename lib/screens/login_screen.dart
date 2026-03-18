@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'chat_list_screen.dart';
+import 'username_setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -13,15 +14,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin() async {
     setState(() => _isLoading = true);
-    final user = await _authService.signInWithGoogle();
+    final result = await _authService.signInWithGoogle();
     
     if (!mounted) return;
     
-    if (user != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => ChatListScreen()),
-      );
+    if (result != null) {
+      if (result['requiresUsername'] == true) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => UsernameSetupScreen()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => ChatListScreen()),
+        );
+      }
     } else {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(

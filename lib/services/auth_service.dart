@@ -12,11 +12,12 @@ class AuthService {
   );
 
   /// Initiate Google Sign-In and authenticate with Backend
-  Future<UserModel?> signInWithGoogle() async {
+  /// Returns a map with 'user' (UserModel) and 'requiresUsername' (bool)
+  Future<Map<String, dynamic>?> signInWithGoogle() async {
     try {
       // 1. Authenticate with Google First
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null; // Used aborted sign-in
+      if (googleUser == null) return null; // User aborted sign-in
 
       // 2. Extract Authentication Tokens
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -35,13 +36,17 @@ class AuthService {
         final data = jsonDecode(response.body);
         final String token = data['token'];
         final UserModel user = UserModel.fromJson(data['user']);
+        final bool requiresUsername = data['requiresUsername'] ?? false;
 
         // 4. Persist Auth Details
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(Constants.tokenKey, token);
         await prefs.setString(Constants.userKey, jsonEncode(user.toJson()));
 
-        return user;
+        return {
+          'user': user,
+          'requiresUsername': requiresUsername,
+        };
       } else {
         print("Backend Auth Error: ${response.body}");
         _googleSignIn.signOut();
@@ -77,5 +82,11 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(Constants.tokenKey);
     await prefs.remove(Constants.userKey);
+  }
+
+  /// Update local user cache
+  Future<void> updateLocalUser(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(Constants.userKey, jsonEncode(user.toJson()));
   }
 }
