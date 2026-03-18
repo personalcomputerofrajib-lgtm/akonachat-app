@@ -34,7 +34,7 @@ android {
         create("release") {
             keyAlias = System.getenv("KEY_ALIAS") ?: "akonachat"
             keyPassword = System.getenv("KEY_PASSWORD") ?: "akonachat123"
-            storeFile = if (System.getenv("KEYSTORE_FILE") != null) file(System.getenv("KEYSTORE_FILE")) else file("../../../akonakey.jks")
+            storeFile = if (System.getenv("KEYSTORE_FILE") != null) file(System.getenv("KEYSTORE_FILE")) else file("../../akonakey.jks")
             storePassword = System.getenv("STORE_PASSWORD") ?: "akonachat123"
         }
     }
