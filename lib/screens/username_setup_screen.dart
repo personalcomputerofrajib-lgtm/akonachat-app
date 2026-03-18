@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/constants.dart';
 import '../services/auth_service.dart';
+import '../models/user_model.dart';
 import 'profile_setup_screen.dart';
 
 class UsernameSetupScreen extends StatefulWidget {
