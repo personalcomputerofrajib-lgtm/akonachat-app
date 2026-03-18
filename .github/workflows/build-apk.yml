@@ -32,8 +32,16 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > akonakey.jks
+
       - name: Build APK
         run: flutter build apk --release
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEYSTORE_FILE: ../../../akonakey.jks
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
