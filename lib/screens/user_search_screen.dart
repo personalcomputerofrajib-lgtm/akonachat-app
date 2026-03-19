@@ -99,7 +99,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search by @username...',
+                hintText: 'Search by name or @username...',
                 prefixIcon: Icon(Icons.search),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

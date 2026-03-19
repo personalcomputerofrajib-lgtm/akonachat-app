@@ -15,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _aboutController = TextEditingController();
   
   UserModel? _user;
@@ -34,6 +35,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _user = user;
       if (user != null) {
         _nameController.text = user.name;
+        _usernameController.text = user.username ?? '';
         _aboutController.text = user.about ?? '';
       }
       _isLoading = false;
@@ -45,7 +47,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     try {
       final token = await _authService.getToken();
-      final response = await http.patch(
+      
+      // 1. Update Basic Profile
+      final profileResp = await http.patch(
         Uri.parse('${Constants.apiUrl}/users/profile'),
         headers: {
           'Content-Type': 'application/json',
@@ -57,17 +61,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final updatedUser = UserModel.fromJson(data);
+      bool usernameSuccess = true;
+      String? usernameError;
+
+      // 2. Update Username if changed
+      if (_usernameController.text.trim() != _user?.username) {
+        final usernameResp = await http.post(
+          Uri.parse('${Constants.apiUrl}/users/username'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'username': _usernameController.text.trim(),
+          }),
+        );
+
+        if (usernameResp.statusCode != 200) {
+          usernameSuccess = false;
+          final errorData = jsonDecode(usernameResp.body);
+          usernameError = errorData['error'] ?? 'Username update failed';
+        }
+      }
+
+      if (profileResp.statusCode == 200 && usernameSuccess) {
+        final data = jsonDecode(profileResp.body);
+        UserModel updatedUser = UserModel.fromJson(data);
+        
+        // Refresh full user data to get updated username
+        final meResp = await http.get(
+          Uri.parse('${Constants.apiUrl}/users/me'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (meResp.statusCode == 200) {
+          updatedUser = UserModel.fromJson(jsonDecode(meResp.body));
+        }
+
         await _authService.updateLocalUser(updatedUser);
+        setState(() => _user = updatedUser);
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Profile updated successfully!')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update profile')),
+          SnackBar(content: Text(usernameError ?? 'Failed to update profile')),
         );
       }
     } catch (e) {
@@ -210,6 +248,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             SizedBox(height: 24),
             TextField(
+              controller: _usernameController,
+              decoration: InputDecoration(
+                labelText: 'Username',
+                prefixIcon: Icon(Icons.alternate_email),
+                prefixText: '@',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintText: 'e.g. rajib_123',
+                helperText: 'Unique handle, 5-10 characters [a-z0-9_]',
+              ),
+            ),
+            SizedBox(height: 24),
+            TextField(
               controller: _aboutController,
               maxLines: 3,
               decoration: InputDecoration(
@@ -220,11 +270,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             SizedBox(height: 32),
-            Text(
-              'Username: @${_user?.username ?? "not set"}',
-              style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic),
-            ),
-            SizedBox(height: 8),
             Text(
               'Email: ${_user?.email ?? ""}',
               style: TextStyle(color: Colors.grey[600]),

@@ -44,16 +44,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
               final chat = _chats.removeAt(index);
               chat['lastMessage'] = data;
               chat['lastSequence'] = data['sequence'];
+              // If message is from someone else, it might increase unread count
+              // The _fetchChats() below is a safe way to ensure all counts are right
               _chats.insert(0, chat);
-            } else {
-              _fetchChats();
             }
+            _fetchChats(); // Refresh to get precise unread counts and sorting
           });
         }
       });
       
       socket?.on('message_status', (data) {
-        if (mounted && data['status'] == 'read') {
+        if (mounted) {
           setState(() {
             _fetchChats();
           });

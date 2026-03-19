@@ -4,6 +4,11 @@ import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:uuid/uuid.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import '../config/constants.dart';
+import 'dart:async';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -27,6 +32,8 @@ class _ChatScreenState extends State<ChatScreen> {
   DateTime? _lastTypingTime;
   bool? _isOtherUserOnline;
   DateTime? _lastSeen;
+  final ImagePicker _picker = ImagePicker();
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -172,11 +179,12 @@ class _ChatScreenState extends State<ChatScreen> {
     final String text = _messageController.text.trim();
     _messageController.clear();
 
+    final String clientMsgId = _uuid.v4();
     final msgData = {
       'chatId': widget.chatId,
       'ciphertext': text,
       'iv': 'base64_iv_placeholder',
-      'clientMsgId': _uuid.v4(),
+      'clientMsgId': clientMsgId,
     };
 
     _socket!.emit('send_message', msgData);
@@ -186,10 +194,72 @@ class _ChatScreenState extends State<ChatScreen> {
         'chatId': widget.chatId,
         'senderId': {'_id': _currentUser!.id},
         'ciphertext': text,
+        'clientMsgId': clientMsgId,
         'createdAt': DateTime.now().toIso8601String(),
         'status': 'sent'
       });
     });
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+      if (image != null) {
+        await _uploadMedia(File(image.path));
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+    }
+  }
+
+  Future<void> _uploadMedia(File file) async {
+    if (_socket == null || _currentUser == null) return;
+    
+    setState(() => _isUploading = true);
+    try {
+      final token = await AuthService().getToken();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${Constants.apiUrl}/media/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final imageUrl = data['url'];
+        
+        final String clientMsgId = _uuid.v4();
+        final msgData = {
+          'chatId': widget.chatId,
+          'ciphertext': '[Image]', // Placeholder text for E2EE or display
+          'mediaUrl': imageUrl,
+          'iv': 'base64_iv_placeholder',
+          'clientMsgId': clientMsgId,
+        };
+
+        _socket!.emit('send_message', msgData);
+
+        setState(() {
+          _messages.insert(0, {
+            'chatId': widget.chatId,
+            'senderId': {'_id': _currentUser!.id},
+            'ciphertext': '[Image]',
+            'mediaUrl': imageUrl,
+            'clientMsgId': clientMsgId,
+            'createdAt': DateTime.now().toIso8601String(),
+            'status': 'sent'
+          });
+        });
+      }
+    } catch (e) {
+      print('Upload error: $e');
+    } finally {
+      setState(() => _isUploading = false);
+    }
   }
 
   @override
@@ -247,7 +317,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 return _buildMessageBubble(
                   msg['ciphertext'] ?? '', 
                   isMe, 
-                  msg['status'] ?? 'sent'
+                  msg['status'] ?? 'sent',
+                  msg['mediaUrl'],
                 );
               },
             ),
@@ -258,7 +329,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isMe, String status) {
+  Widget _buildMessageBubble(String text, bool isMe, String status, [String? mediaUrl]) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -273,27 +344,46 @@ class _ChatScreenState extends State<ChatScreen> {
             bottomRight: Radius.circular(isMe ? 0 : 20),
           ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Flexible(
-              child: Text(
-                text,
-                style: TextStyle(
-                  color: isMe ? Colors.white : Colors.black87,
-                  fontSize: 16,
+            if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  mediaUrl,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (ctx, err, stack) => Icon(Icons.broken_image, size: 50, color: Colors.grey),
                 ),
               ),
+              SizedBox(height: 8),
+            ],
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Text(
+                    text,
+                    style: TextStyle(
+                      color: isMe ? Colors.white : Colors.black87,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                if (isMe) ...[
+                  SizedBox(width: 4),
+                  Icon(
+                    status == 'sent' ? Icons.check : Icons.done_all,
+                    size: 14,
+                    color: status == 'read' ? Colors.blue[200] : Colors.white70,
+                  )
+                ]
+              ],
             ),
-            if (isMe) ...[
-              SizedBox(width: 4),
-              Icon(
-                status == 'sent' ? Icons.check : Icons.done_all,
-                size: 14,
-                color: status == 'read' ? Colors.blue[200] : Colors.white70,
-              )
-            ]
           ],
         ),
       ),
@@ -317,8 +407,10 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Row(
           children: [
             IconButton(
-              icon: Icon(Icons.attach_file, color: Colors.blueAccent),
-              onPressed: () {},
+              icon: _isUploading 
+                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(Icons.attach_file, color: Colors.blueAccent),
+              onPressed: _isUploading ? null : _pickImage,
             ),
             Expanded(
               child: Container(
