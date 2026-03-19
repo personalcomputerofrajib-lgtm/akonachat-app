@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../config/constants.dart';
 import 'dart:async';
+import 'dart:convert';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -71,28 +72,31 @@ class _ChatScreenState extends State<ChatScreen> {
       _syncMessages();
 
       _socket!.on('receive_message', (data) {
-        if (mounted && data['chatId'] == widget.chatId) {
-          setState(() {
-            final clientMsgId = data['clientMsgId'];
-            final existingIndex = _messages.indexWhere(
-              (m) => (m['clientMsgId'] == clientMsgId && clientMsgId != null) || m['_id'] == data['_id']
-            );
-
+      if (mounted && data['chatId'] == widget.chatId) {
+        setState(() {
+          // Deduplication: Check if we already have this message (optimistic UI)
+          final String? clientMsgId = data['clientMsgId'];
+          if (clientMsgId != null) {
+            final existingIndex = _messages.indexWhere((m) => m['clientMsgId'] == clientMsgId);
             if (existingIndex != -1) {
-              _messages[existingIndex] = data;
-            } else {
-              _messages.insert(0, data);
+              // Update existing local message with server data (like absolute ID or final status)
+              _messages[existingIndex]['_id'] = data['_id'];
+              _messages[existingIndex]['status'] = data['status'] ?? 'sent';
+              _messages[existingIndex]['sequence'] = data['sequence'];
+              return;
             }
-            _messages.sort((a, b) {
-              final aSeq = a['sequence'] ?? 0;
-              final bSeq = b['sequence'] ?? 0;
-              return bSeq.compareTo(aSeq);
-            });
-          });
-          _socket!.emit('delivered', {'msgId': data['_id']});
-          _socket!.emit('read', {'msgId': data['_id']});
-        }
-      });
+          }
+
+          // If it's from me but didn't have a matching clientMsgId (unlikely but safe)
+          // or if it's from the other user, add it to the list.
+          _messages.insert(0, data);
+          _scrollToBottom();
+        });
+        
+        // Mark as read
+        _socket!.emit('read', {'chatId': widget.chatId});
+      }
+    });
 
       _socket!.on('sync_messages', (data) {
         if (mounted) {
@@ -155,6 +159,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -198,6 +203,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'createdAt': DateTime.now().toIso8601String(),
         'status': 'sent'
       });
+      _scrollToBottom();
     });
   }
 
@@ -253,12 +259,23 @@ class _ChatScreenState extends State<ChatScreen> {
             'createdAt': DateTime.now().toIso8601String(),
             'status': 'sent'
           });
+          _scrollToBottom();
         });
       }
     } catch (e) {
       print('Upload error: $e');
     } finally {
       setState(() => _isUploading = false);
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0.0, // Scroll to the top (because ListView is reversed)
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -312,7 +329,17 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
-                final isMe = msg['senderId'] != null && msg['senderId']['_id'] == _currentUser?.id;
+                
+                // Robust sender matching: senderId can be a Map or a String
+                final dynamic senderIdRaw = msg['senderId'];
+                String? msgSenderId;
+                if (senderIdRaw is Map) {
+                  msgSenderId = senderIdRaw['_id']?.toString() ?? senderIdRaw['id']?.toString();
+                } else if (senderIdRaw != null) {
+                  msgSenderId = senderIdRaw.toString();
+                }
+
+                final bool isMe = msgSenderId == _currentUser?.id;
                 
                 return _buildMessageBubble(
                   msg['ciphertext'] ?? '', 
@@ -330,6 +357,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(String text, bool isMe, String status, [String? mediaUrl]) {
+    if (text.isEmpty && (mediaUrl == null || mediaUrl.isEmpty)) return SizedBox.shrink();
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -349,41 +378,56 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  mediaUrl,
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (ctx, err, stack) => Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                ),
-              ),
-              SizedBox(height: 8),
-            ],
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Flexible(
-                  child: Text(
-                    text,
-                    style: TextStyle(
-                      color: isMe ? Colors.white : Colors.black87,
-                      fontSize: 16,
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    mediaUrl,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: 200,
+                        color: Colors.grey[200],
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    },
+                    errorBuilder: (ctx, err, stack) => Container(
+                      height: 200,
+                      color: Colors.grey[200],
+                      child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
                     ),
                   ),
                 ),
-                if (isMe) ...[
-                  SizedBox(width: 4),
-                  Icon(
-                    status == 'sent' ? Icons.check : Icons.done_all,
-                    size: 14,
-                    color: status == 'read' ? Colors.blue[200] : Colors.white70,
-                  )
-                ]
-              ],
-            ),
+              ),
+            ],
+            if (text.isNotEmpty)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      text,
+                      style: TextStyle(
+                        color: isMe ? Colors.white : Colors.black87,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  if (isMe) ...[
+                    SizedBox(width: 4),
+                    Icon(
+                      status == 'read' ? Icons.done_all : Icons.check,
+                      size: 14,
+                      color: status == 'read' ? Colors.blue[200] : Colors.white70,
+                    )
+                  ]
+                ],
+              ),
           ],
         ),
       ),
