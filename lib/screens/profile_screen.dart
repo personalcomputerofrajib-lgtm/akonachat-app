@@ -1,0 +1,237 @@
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../config/constants.dart';
+import '../services/auth_service.dart';
+import '../models/user_model.dart';
+
+class ProfileScreen extends StatefulWidget {
+  @override
+  _ProfileScreenState createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final AuthService _authService = AuthService();
+  final _nameController = TextEditingController();
+  final _aboutController = TextEditingController();
+  
+  UserModel? _user;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  final ImagePicker _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  void _loadUserData() async {
+    final user = await _authService.loadUser();
+    setState(() {
+      _user = user;
+      if (user != null) {
+        _nameController.text = user.name;
+        _aboutController.text = user.about ?? '';
+      }
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _updateProfile() async {
+    setState(() => _isSaving = true);
+    
+    try {
+      final token = await _authService.getToken();
+      final response = await http.patch(
+        Uri.parse('${Constants.apiUrl}/users/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'name': _nameController.text.trim(),
+          'about': _aboutController.text.trim(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final updatedUser = UserModel.fromJson(data);
+        await _authService.updateLocalUser(updatedUser);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Profile updated successfully!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update profile')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+      if (image != null) {
+        await _uploadImage(File(image.path));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+    }
+  }
+
+  Future<void> _uploadImage(File file) async {
+    setState(() => _isSaving = true);
+    try {
+      final token = await _authService.getToken();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${Constants.apiUrl}/media/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final imageUrl = data['url'];
+
+        // Update profile in backend
+        final updateResp = await http.patch(
+          Uri.parse('${Constants.apiUrl}/users/profile'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'profilePic': imageUrl}),
+        );
+
+        if (updateResp.statusCode == 200) {
+          final userData = jsonDecode(updateResp.body);
+          final updatedUser = UserModel.fromJson(userData);
+          await _authService.updateLocalUser(updatedUser);
+          
+          setState(() {
+            _user = updatedUser;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Profile picture updated!')),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error uploading: $e')));
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text('My Profile'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+        actions: [
+          if (_isSaving)
+            Center(child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            ))
+          else
+            IconButton(
+              icon: Icon(Icons.check, color: Colors.blueAccent),
+              onPressed: _updateProfile,
+            )
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Stack(
+              children: [
+                CircleAvatar(
+                  radius: 60,
+                  backgroundImage: _user?.profilePic != null && _user!.profilePic.isNotEmpty
+                      ? NetworkImage(_user!.profilePic)
+                      : null,
+                  backgroundColor: Colors.grey[200],
+                  child: (_user?.profilePic == null || _user!.profilePic.isEmpty)
+                      ? Icon(Icons.person, size: 60, color: Colors.grey)
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.blueAccent,
+                    radius: 20,
+                    child: IconButton(
+                      icon: Icon(Icons.camera_alt, size: 20, color: Colors.white),
+                      onPressed: _pickImage,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 32),
+            TextField(
+              controller: _nameController,
+              decoration: InputDecoration(
+                labelText: 'Full Name',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            SizedBox(height: 24),
+            TextField(
+              controller: _aboutController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'About / Bio',
+                prefixIcon: Icon(Icons.info_outline),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintText: 'Tell us something about yourself...',
+              ),
+            ),
+            SizedBox(height: 32),
+            Text(
+              'Username: @${_user?.username ?? "not set"}',
+              style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Email: ${_user?.email ?? ""}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -6,9 +6,10 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:uuid/uuid.dart';
 
 class ChatScreen extends StatefulWidget {
+  final String chatId;
   final String chatName;
 
-  const ChatScreen({Key? key, required this.chatName}) : super(key: key);
+  const ChatScreen({Key? key, required this.chatId, required this.chatName}) : super(key: key);
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -19,13 +20,39 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<Map<String, dynamic>> _messages = [];
   IO.Socket? _socket;
   UserModel? _currentUser;
-  final String _mockChatId = "60d5ecb8b392d7001f8e4c12"; // Placeholder
   final Uuid _uuid = Uuid();
+
+  bool _isOtherUserTyping = false;
+  bool _isMeTyping = false;
+  DateTime? _lastTypingTime;
+  bool? _isOtherUserOnline;
+  DateTime? _lastSeen;
 
   @override
   void initState() {
     super.initState();
     _initChat();
+    _messageController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    if (_socket == null) return;
+    
+    if (!_isMeTyping && _messageController.text.isNotEmpty) {
+      _isMeTyping = true;
+      _socket!.emit('typing', {'chatId': widget.chatId});
+    } else if (_isMeTyping && _messageController.text.isEmpty) {
+      _isMeTyping = false;
+      _socket!.emit('stop_typing', {'chatId': widget.chatId});
+    }
+    
+    _lastTypingTime = DateTime.now();
+    Future.delayed(Duration(seconds: 2), () {
+      if (_isMeTyping && DateTime.now().difference(_lastTypingTime!) >= Duration(seconds: 2)) {
+        _isMeTyping = false;
+        _socket!.emit('stop_typing', {'chatId': widget.chatId});
+      }
+    });
   }
 
   void _initChat() async {
@@ -33,15 +60,100 @@ class _ChatScreenState extends State<ChatScreen> {
     _socket = SocketService().socket;
 
     if (_socket != null) {
+      // 1. Join room
+      _socket!.emit('join', {'chatId': widget.chatId});
+      
+      // 2. Initial Sync
+      _syncMessages();
+
       _socket!.on('receive_message', (data) {
-        if (mounted) {
+        if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
-            _messages.insert(0, data);
+            final clientMsgId = data['clientMsgId'];
+            final existingIndex = _messages.indexWhere(
+              (m) => (m['clientMsgId'] == clientMsgId && clientMsgId != null) || m['_id'] == data['_id']
+            );
+
+            if (existingIndex != -1) {
+              _messages[existingIndex] = data;
+            } else {
+              _messages.insert(0, data);
+            }
+            _messages.sort((a, b) => b['sequence']?.compareTo(a['sequence'] ?? 0) ?? 0);
+          });
+          _socket!.emit('delivered', {'msgId': data['_id']});
+          _socket!.emit('read', {'msgId': data['_id']});
+        }
+      });
+
+      _socket!.on('sync_messages', (data) {
+        if (mounted) {
+          final List newlySynced = data as List;
+          setState(() {
+            for (var msg in newlySynced) {
+              if (!_messages.any((m) => m['_id'] == msg['_id'])) {
+                _messages.insert(0, msg);
+              }
+            }
+            _messages.sort((a, b) => b['sequence'].compareTo(a['sequence']));
           });
         }
       });
-      // Placeholder: emit join room or similar if backend requires explicit join beyond default
+
+      _socket!.on('message_status', (data) {
+        if (mounted) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
+            if (index != -1) {
+              _messages[index]['status'] = data['status'];
+            }
+          });
+        }
+      });
+
+      _socket!.on('user_typing', (data) {
+        if (mounted && data['chatId'] == widget.chatId) {
+          setState(() => _isOtherUserTyping = true);
+        }
+      });
+
+      _socket!.on('user_stop_typing', (data) {
+        if (mounted && data['chatId'] == widget.chatId) {
+          setState(() => _isOtherUserTyping = false);
+        }
+      });
+
+      _socket!.on('presence', (data) {
+        if (mounted && data['userId'] != _currentUser?.id) {
+          setState(() {
+            _isOtherUserOnline = data['isOnline'];
+            _lastSeen = data['lastSeen'] != null ? DateTime.parse(data['lastSeen']) : null;
+          });
+        }
+      });
+
+      // Handle Reconnection
+      _socket!.on('connect', (_) {
+        _socket!.emit('join', {'chatId': widget.chatId});
+        _syncMessages();
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _messageController.removeListener(_onTextChanged);
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  void _syncMessages() {
+    if (_socket == null) return;
+    int lastSeq = 0;
+    if (_messages.isNotEmpty) {
+      lastSeq = _messages.first['sequence'] ?? 0;
+    }
+    _socket!.emit('sync', {'chatId': widget.chatId, 'lastSequence': lastSeq});
   }
 
   void _sendMessage() {
@@ -51,20 +163,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final String text = _messageController.text.trim();
     _messageController.clear();
 
-    // In a real E2EE environment, this text would be encrypted with Signal Protocol here.
-    // For MVP frontend placeholder, we send plaintext pretending it's ciphertext to match backend schema.
     final msgData = {
-      'chatId': _mockChatId,
-      'ciphertext': text, // Placeholder
+      'chatId': widget.chatId,
+      'ciphertext': text,
       'iv': 'base64_iv_placeholder',
       'clientMsgId': _uuid.v4(),
     };
 
     _socket!.emit('send_message', msgData);
 
-    // Optimistically add to UI
     setState(() {
       _messages.insert(0, {
+        'chatId': widget.chatId,
         'senderId': {'_id': _currentUser!.id},
         'ciphertext': text,
         'createdAt': DateTime.now().toIso8601String(),
@@ -90,7 +200,18 @@ class _ChatScreenState extends State<ChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(widget.chatName, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Text('Online', style: TextStyle(fontSize: 12, color: Colors.greenAccent[400], fontWeight: FontWeight.normal)),
+                Text(
+                  _isOtherUserTyping 
+                    ? 'Typing...' 
+                    : (_isOtherUserOnline == true ? 'Online' : 'Offline'),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _isOtherUserTyping 
+                      ? Colors.blueAccent 
+                      : (_isOtherUserOnline == true ? Colors.greenAccent[400] : Colors.grey),
+                    fontWeight: (_isOtherUserTyping || _isOtherUserOnline == true) ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
               ],
             ),
           ],
@@ -159,7 +280,7 @@ class _ChatScreenState extends State<ChatScreen> {
             if (isMe) ...[
               SizedBox(width: 4),
               Icon(
-                status == 'read' ? Icons.done_all : Icons.check,
+                status == 'sent' ? Icons.check : Icons.done_all,
                 size: 14,
                 color: status == 'read' ? Colors.blue[200] : Colors.white70,
               )

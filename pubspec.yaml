@@ -37,6 +37,7 @@ dependencies:
   socket_io_client: ^3.0.1
   shared_preferences: ^2.2.3
   uuid: ^4.3.3
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

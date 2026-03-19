@@ -1,5 +1,5 @@
 class Constants {
-  // Use 10.0.2.2 for Android Emulator, or 52.66.216.152 for production
+  // Production AWS Server
   static const String serverUrl = 'http://52.66.216.152:9000';
   static const String apiUrl = '$serverUrl/api';
   
