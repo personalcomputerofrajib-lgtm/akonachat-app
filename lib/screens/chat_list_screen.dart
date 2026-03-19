@@ -30,7 +30,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void _initApp() async {
     final user = await _authService.loadUser();
     if (user != null) {
-      final socket = await SocketService().connect();
+      await SocketService().connect();
+      final socket = SocketService().socket;
       await _fetchChats();
 
       // Listen for real-time updates
