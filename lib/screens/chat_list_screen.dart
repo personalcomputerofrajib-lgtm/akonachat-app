@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
 import '../models/user_model.dart';
@@ -16,6 +19,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   final AuthService _authService = AuthService();
   List<dynamic> _chats = [];
   bool _isLoading = true;
+  UserModel? _currentUser;
 
   @override
   void initState() {
@@ -36,13 +40,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
             final chatId = data['chatId'];
             final index = _chats.indexWhere((c) => c['_id'] == chatId);
             if (index != -1) {
-              // Move chat to top and update last message
               final chat = _chats.removeAt(index);
               chat['lastMessage'] = data;
               chat['lastSequence'] = data['sequence'];
               _chats.insert(0, chat);
             } else {
-              // New chat? Re-fetch list
               _fetchChats();
             }
           });
@@ -52,7 +54,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       socket?.on('message_status', (data) {
         if (mounted && data['status'] == 'read') {
           setState(() {
-            _fetchChats(); // Refresh to sync unread counts
+            _fetchChats();
           });
         }
       });
@@ -117,6 +119,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    return Scaffold(
       drawer: Drawer(
         child: Column(
           children: [
@@ -144,7 +147,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               leading: Icon(Icons.person_outline),
               title: Text('My Profile'),
               onTap: () {
-                Navigator.pop(context); // Close drawer
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => ProfileScreen()),
@@ -167,7 +170,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
               leading: Icon(Icons.settings_outlined),
               title: Text('Settings'),
               onTap: () {
-                // Future implementation
                 Navigator.pop(context);
               },
             ),
@@ -222,7 +224,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 final otherUser = (chat['participants'] as List).firstWhere((p) => p['_id'] != _currentUser?.id);
                 final lastMsg = chat['lastMessage'];
 
-                // Calculate unread count
                 int unreadCount = 0;
                 if (chat['lastReadBy'] != null) {
                   final myReadInfo = (chat['lastReadBy'] as List).firstWhere(
@@ -347,6 +348,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ),
       ),
     );
+  }
+
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final difference = now.difference(time);

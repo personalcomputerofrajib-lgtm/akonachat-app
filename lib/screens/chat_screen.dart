@@ -48,7 +48,7 @@ class _ChatScreenState extends State<ChatScreen> {
     
     _lastTypingTime = DateTime.now();
     Future.delayed(Duration(seconds: 2), () {
-      if (_isMeTyping && DateTime.now().difference(_lastTypingTime!) >= Duration(seconds: 2)) {
+      if (_isMeTyping && _lastTypingTime != null && DateTime.now().difference(_lastTypingTime!) >= Duration(seconds: 2)) {
         _isMeTyping = false;
         _socket!.emit('stop_typing', {'chatId': widget.chatId});
       }
@@ -60,10 +60,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _socket = SocketService().socket;
 
     if (_socket != null) {
-      // 1. Join room
       _socket!.emit('join', {'chatId': widget.chatId});
-      
-      // 2. Initial Sync
       _syncMessages();
 
       _socket!.on('receive_message', (data) {
@@ -79,7 +76,11 @@ class _ChatScreenState extends State<ChatScreen> {
             } else {
               _messages.insert(0, data);
             }
-            _messages.sort((a, b) => b['sequence']?.compareTo(a['sequence'] ?? 0) ?? 0);
+            _messages.sort((a, b) {
+              final aSeq = a['sequence'] ?? 0;
+              final bSeq = b['sequence'] ?? 0;
+              return bSeq.compareTo(aSeq);
+            });
           });
           _socket!.emit('delivered', {'msgId': data['_id']});
           _socket!.emit('read', {'msgId': data['_id']});
@@ -95,7 +96,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 _messages.insert(0, msg);
               }
             }
-            _messages.sort((a, b) => b['sequence'].compareTo(a['sequence']));
+            _messages.sort((a, b) {
+              final aSeq = a['sequence'] ?? 0;
+              final bSeq = b['sequence'] ?? 0;
+              return bSeq.compareTo(aSeq);
+            });
           });
         }
       });
@@ -132,7 +137,6 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      // Handle Reconnection
       _socket!.on('connect', (_) {
         _socket!.emit('join', {'chatId': widget.chatId});
         _syncMessages();
@@ -151,7 +155,12 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_socket == null) return;
     int lastSeq = 0;
     if (_messages.isNotEmpty) {
-      lastSeq = _messages.first['sequence'] ?? 0;
+      // Find the highest sequence number among messages that have one
+      for (var msg in _messages) {
+        if (msg['sequence'] != null && msg['sequence'] > lastSeq) {
+          lastSeq = msg['sequence'];
+        }
+      }
     }
     _socket!.emit('sync', {'chatId': widget.chatId, 'lastSequence': lastSeq});
   }
@@ -193,7 +202,7 @@ class _ChatScreenState extends State<ChatScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: Colors.blueAccent.withOpacity(0.2),
-              child: Text(widget.chatName[0], style: TextStyle(color: Colors.blueAccent)),
+              child: Text(widget.chatName.isNotEmpty ? widget.chatName[0] : 'U', style: TextStyle(color: Colors.blueAccent)),
             ),
             SizedBox(width: 12),
             Column(
@@ -208,7 +217,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     fontSize: 12,
                     color: _isOtherUserTyping 
                       ? Colors.blueAccent 
-                      : (_isOtherUserOnline == true ? Colors.greenAccent[400] : Colors.grey),
+                      : (_isOtherUserOnline == true ? Colors.green[400] : Colors.grey),
                     fontWeight: (_isOtherUserTyping || _isOtherUserOnline == true) ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
@@ -233,10 +242,10 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
-                final isMe = msg['senderId']['_id'] == _currentUser?.id;
+                final isMe = msg['senderId'] != null && msg['senderId']['_id'] == _currentUser?.id;
                 
                 return _buildMessageBubble(
-                  msg['ciphertext'], 
+                  msg['ciphertext'] ?? '', 
                   isMe, 
                   msg['status'] ?? 'sent'
                 );
