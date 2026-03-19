@@ -100,8 +100,9 @@ class _ChatScreenState extends State<ChatScreen> {
           _scrollToBottom();
         });
         
-        // Mark as read
-        _socket!.emit('read', {'chatId': widget.chatId});
+        // Mark entire chat as read so our lastReadBy sequence stays current.
+        // This prevents a false unread badge when returning to the chat list.
+        _socket!.emit('read_chat', {'chatId': widget.chatId});
       }
     });
 
@@ -338,16 +339,21 @@ class _ChatScreenState extends State<ChatScreen> {
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 
-                // Robust sender matching: senderId can be a Map or a String
+                // Extract senderId — can be a populated Map {_id,name,profilePic}
+                // (from receive_message / sync_messages) or a plain String (legacy).
+                // We also handle the optimistic local messages which use {'_id': id}.
                 final dynamic senderIdRaw = msg['senderId'];
-                String? msgSenderId;
+                String msgSenderId = '';
                 if (senderIdRaw is Map) {
-                  msgSenderId = senderIdRaw['_id']?.toString() ?? senderIdRaw['id']?.toString();
+                  msgSenderId = (senderIdRaw['_id'] ?? senderIdRaw['id'] ?? '').toString();
                 } else if (senderIdRaw != null) {
                   msgSenderId = senderIdRaw.toString();
                 }
 
-                final bool isMe = msgSenderId.toString() == _currentUser?.id.toString();
+                final String currentUserId = _currentUser?.id ?? '';
+                final bool isMe = msgSenderId.isNotEmpty &&
+                    currentUserId.isNotEmpty &&
+                    msgSenderId == currentUserId;
                 
                 return _buildMessageBubble(
                   msg['ciphertext'] ?? '', 

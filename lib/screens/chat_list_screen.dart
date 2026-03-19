@@ -37,27 +37,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
       // Listen for real-time updates
       socket?.on('receive_message', (data) {
         if (mounted) {
-          setState(() {
-            final chatId = data['chatId'];
-            final index = _chats.indexWhere((c) => c['_id'] == chatId);
-            if (index != -1) {
-              final chat = _chats.removeAt(index);
-              chat['lastMessage'] = data;
-              chat['lastSequence'] = data['sequence'];
-              // If message is from someone else, it might increase unread count
-              // The _fetchChats() below is a safe way to ensure all counts are right
-              _chats.insert(0, chat);
-            }
-            _fetchChats(); // Refresh to get precise unread counts and sorting
-          });
+          // Fetch fresh data from server — it correctly has lastReadBy updated
+          // for the sender too, so their own messages don't show as unread.
+          _fetchChats();
         }
       });
-      
+
       socket?.on('message_status', (data) {
         if (mounted) {
-          setState(() {
-            _fetchChats();
-          });
+          _fetchChats();
         }
       });
 
