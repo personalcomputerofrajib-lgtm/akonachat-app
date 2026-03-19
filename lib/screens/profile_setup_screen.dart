@@ -31,8 +31,55 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       setState(() {
         _user = user;
         _nameController.text = user.name;
-        _aboutController.text = user.about ?? 'Hey there! I am using AkonaChat.';
+        _aboutController.text = user.about ?? '';
       });
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+      if (image != null) {
+        _uploadProfileImage(File(image.path));
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+    }
+  }
+
+  Future<void> _uploadProfileImage(File file) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _authService.getToken();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${Constants.apiUrl}/media/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _user = UserModel(
+            id: _user!.id,
+            email: _user!.email,
+            name: _user!.name,
+            profilePic: data['url'],
+            username: _user!.username,
+            about: _user!.about,
+            hasCompletedOnboarding: _user!.hasCompletedOnboarding,
+          );
+        });
+      }
+    } catch (e) {
+      print('Upload error: $e');
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
@@ -61,6 +108,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         body: jsonEncode({
           'name': name,
           'about': about,
+          'profilePic': _user?.profilePic,
         }),
       );
 
@@ -119,10 +167,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                       Positioned(
                         bottom: 0,
                         right: 0,
-                        child: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.blueAccent,
-                          child: Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                        child: GestureDetector(
+                          onTap: _pickImage,
+                          child: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.blueAccent,
+                            child: Icon(Icons.camera_alt, size: 18, color: Colors.white),
+                          ),
                         ),
                       ),
                     ],

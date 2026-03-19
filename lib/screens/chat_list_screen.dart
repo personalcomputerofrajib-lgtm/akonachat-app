@@ -222,6 +222,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
           : ListView.builder(
               itemCount: _chats.length,
               itemBuilder: (context, index) {
+                final chat = _chats[index];
+                final lastMsg = chat['lastMessage'];
                 int unreadCount = 0;
                 if (chat['lastReadBy'] != null) {
                   final myReadInfo = (chat['lastReadBy'] as List).firstWhere(
