@@ -222,21 +222,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
           : ListView.builder(
               itemCount: _chats.length,
               itemBuilder: (context, index) {
-                final chat = _chats[index];
-                final otherUser = (chat['participants'] as List).firstWhere((p) => p['_id'] != _currentUser?.id);
-                final lastMsg = chat['lastMessage'];
-
                 int unreadCount = 0;
                 if (chat['lastReadBy'] != null) {
                   final myReadInfo = (chat['lastReadBy'] as List).firstWhere(
-                    (r) => r['userId'] == _currentUser?.id,
+                    (r) => r['userId'].toString() == _currentUser?.id.toString(),
                     orElse: () => null,
                   );
                   if (myReadInfo != null) {
                     unreadCount = (chat['lastSequence'] ?? 0) - (myReadInfo['lastReadSequence'] ?? 0);
                     if (unreadCount < 0) unreadCount = 0;
+                  } else {
+                    // If no read info yet, everything is unread
+                    unreadCount = chat['lastSequence'] ?? 0;
                   }
                 }
+
+                // Robust otherUser selection
+                final participants = chat['participants'] as List;
+                final otherUser = participants.firstWhere(
+                  (p) => p['_id'].toString() != _currentUser?.id.toString(),
+                  orElse: () => participants.first,
+                );
 
                 return _buildChatTile(
                   chatId: chat['_id'],

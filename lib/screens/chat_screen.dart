@@ -65,11 +65,17 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _initChat() async {
-    _currentUser = await AuthService().loadUser();
+    final user = await AuthService().loadUser();
     _socket = SocketService().socket;
+    if (mounted) {
+      setState(() {
+        _currentUser = user;
+      });
+    }
 
     if (_socket != null) {
       _socket!.emit('join', {'chatId': widget.chatId});
+      _socket!.emit('read_chat', {'chatId': widget.chatId});
       _syncMessages();
 
       _socket!.on('receive_message', (data) {
@@ -341,7 +347,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   msgSenderId = senderIdRaw.toString();
                 }
 
-                final bool isMe = msgSenderId == _currentUser?.id;
+                final bool isMe = msgSenderId.toString() == _currentUser?.id.toString();
                 
                 return _buildMessageBubble(
                   msg['ciphertext'] ?? '', 
