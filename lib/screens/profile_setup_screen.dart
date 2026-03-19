@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
