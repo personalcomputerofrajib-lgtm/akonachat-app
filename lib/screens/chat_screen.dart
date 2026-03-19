@@ -86,10 +86,12 @@ class _ChatScreenState extends State<ChatScreen> {
           if (clientMsgId != null) {
             final existingIndex = _messages.indexWhere((m) => m['clientMsgId'] == clientMsgId);
             if (existingIndex != -1) {
-              // Update existing local message with server data (like absolute ID or final status)
+              // Update existing local message with server data
               _messages[existingIndex]['_id'] = data['_id'];
               _messages[existingIndex]['status'] = data['status'] ?? 'sent';
               _messages[existingIndex]['sequence'] = data['sequence'];
+              // IMPORTANT: Update senderId from server to ensure it's accurate and populated
+              _messages[existingIndex]['senderId'] = data['senderId'];
               return;
             }
           }
@@ -351,10 +353,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 final String currentUserId = _currentUser?.id ?? '';
-                // Case-insensitive comparison and trim just in case
+                // Case-insensitive comparison and trim. Handle potential ObjectId type issues.
                 final bool isMe = msgSenderId.isNotEmpty &&
                     currentUserId.isNotEmpty &&
-                    msgSenderId.toLowerCase().trim() == currentUserId.toLowerCase().trim();
+                    msgSenderId.toString().toLowerCase().trim() == currentUserId.toString().toLowerCase().trim();
                 
                 return _buildMessageBubble(
                   msg['ciphertext'] ?? '', 

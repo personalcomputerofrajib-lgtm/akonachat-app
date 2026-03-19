@@ -18,6 +18,7 @@ class SocketService {
     _socket = IO.io(Constants.serverUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
+      'forceNew': true, // Crucial for account switching on same device
       'auth': {'token': token},
     });
 

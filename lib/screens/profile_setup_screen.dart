@@ -59,7 +59,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         Uri.parse('${Constants.apiUrl}/media/upload'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+      
+      // Explicitly set content type to help backend multer/mime checks
+      request.files.add(await http.MultipartFile.fromPath(
+        'file', 
+        file.path,
+        // Optional: you can add MediaType here if you import 'package:http_parser/http_parser.dart';
+      ));
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
