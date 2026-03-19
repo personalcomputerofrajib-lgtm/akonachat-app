@@ -351,9 +351,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 final String currentUserId = _currentUser?.id ?? '';
+                // Case-insensitive comparison and trim just in case
                 final bool isMe = msgSenderId.isNotEmpty &&
                     currentUserId.isNotEmpty &&
-                    msgSenderId == currentUserId;
+                    msgSenderId.toLowerCase().trim() == currentUserId.toLowerCase().trim();
                 
                 return _buildMessageBubble(
                   msg['ciphertext'] ?? '', 

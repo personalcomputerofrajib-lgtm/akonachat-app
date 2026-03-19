@@ -215,7 +215,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 int unreadCount = 0;
                 if (chat['lastReadBy'] != null) {
                   final myReadInfo = (chat['lastReadBy'] as List).firstWhere(
-                    (r) => r['userId'].toString() == _currentUser?.id.toString(),
+                    (r) => r['userId'].toString().toLowerCase().trim() == _currentUser?.id.toString().toLowerCase().trim(),
                     orElse: () => null,
                   );
                   if (myReadInfo != null) {
@@ -230,7 +230,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 // Robust otherUser selection
                 final participants = chat['participants'] as List;
                 final otherUser = participants.firstWhere(
-                  (p) => p['_id'].toString() != _currentUser?.id.toString(),
+                  (p) => p['_id'].toString().toLowerCase().trim() != _currentUser?.id.toString().toLowerCase().trim(),
                   orElse: () => participants.first,
                 );
 
