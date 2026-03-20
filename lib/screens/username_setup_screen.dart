@@ -44,7 +44,7 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({'username': username}),
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         // Update local user data first

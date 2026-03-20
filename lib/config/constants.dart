@@ -1,6 +1,7 @@
 class Constants {
-  // Production AWS Server
+  // Production AWS Server:
   static const String serverUrl = 'http://52.66.216.152:9000';
+  // Local Testing: 'http://localhost:9000'
   static const String apiUrl = '$serverUrl/api';
   
   // Google Web Client ID (for requesting the ID token for backend)

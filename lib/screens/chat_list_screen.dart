@@ -22,6 +22,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   final AuthService _authService = AuthService();
   List<dynamic> _chats = [];
   bool _isLoading = true;
+  String? _errorMessage;
   UserModel? _currentUser;
 
   @override
@@ -31,56 +32,139 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _initApp() async {
-    final user = await _authService.loadUser();
-    if (user != null) {
-      await SocketService().connect();
-      final socket = SocketService().socket;
-      
-      // Load from local DB first
-      await _loadLocalChats();
-      
-      // Then fetch from server
-      await _fetchChats();
-
-      // Listen for real-time updates
-      socket?.on('receive_message', (data) {
-        if (mounted) {
-          // Fetch fresh data from server — it correctly has lastReadBy updated
-          // for the sender too, so their own messages don't show as unread.
-          _fetchChats();
-        }
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
       });
+      
+      final user = await _authService.loadUser();
+      setState(() => _currentUser = user);
 
-      socket?.on('message_status', (data) {
-        if (mounted) {
-          _fetchChats();
-        }
-      });
+      if (user != null) {
+        final socketService = SocketService();
+        print('🔄 Attempting socket connection...');
+        final socketConnected = await socketService.connect();
 
-      socket?.on('presence', (data) {
-        if (mounted) {
+        if (!mounted) return;
+
+        if (!socketConnected) {
+          final errorMsg = socketService.lastError ?? 'Socket connection failed';
+          print('❌ Socket connection failed: $errorMsg');
           setState(() {
-            final userId = data['userId'];
-            final isOnline = data['isOnline'];
-            for (var chat in _chats) {
-              final participants = chat['participants'] as List;
-              for (var p in participants) {
-                if (p['_id'] == userId) {
-                  p['isOnline'] = isOnline;
-                  p['lastSeen'] = data['lastSeen'];
+            _errorMessage = 'Connection Error: $errorMsg';
+            _isLoading = false;
+          });
+          _showRetryDialog(errorMsg);
+          return;
+        }
+
+        print('✅ Socket connected successfully');
+        final socket = socketService.socket;
+        
+        // Load from local DB first
+        await _loadLocalChats();
+        
+        // Then fetch from server
+        await _fetchChats();
+
+        // Listen for real-time updates
+        socket?.on('receive_message', (data) {
+          if (mounted) {
+            _fetchChats();
+          }
+        });
+
+        socket?.on('message_status', (data) {
+          if (mounted) {
+            _fetchChats();
+          }
+        });
+
+        socket?.on('presence', (data) {
+          if (mounted) {
+            setState(() {
+              final userId = data['userId'];
+              final isOnline = data['isOnline'];
+              for (var chat in _chats) {
+                final participants = chat['participants'] as List;
+                for (var p in participants) {
+                  if (p['_id'] == userId) {
+                    p['isOnline'] = isOnline;
+                    p['lastSeen'] = data['lastSeen'];
+                  }
                 }
               }
-            }
-          });
-        }
-      });
+            });
+          }
+        });
+      } else {
+        // Go back to login if no user
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => LoginScreen()),
+        );
+      }
+    } catch (e) {
+      print('❌ Initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Initialization error: $e';
+          _isLoading = false;
+        });
+        _showRetryDialog(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
-    if (mounted) {
-      setState(() {
-        _currentUser = user;
-        _isLoading = false;
-      });
-    }
+  }
+
+  void _showRetryDialog(String error) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text('Connection Failed'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Error: $error'),
+              SizedBox(height: 16),
+              Text(
+                'Troubleshooting steps:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('1. Check your internet connection'),
+              Text('2. Ensure backend server is running'),
+              Text('3. Verify Redis is running'),
+              Text('4. Verify MongoDB is running'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _initApp(); // Retry
+            },
+            child: Text('Retry'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _logout();
+            },
+            child: Text('Logout'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadLocalChats() async {
@@ -96,24 +180,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Future<void> _fetchChats() async {
     try {
       final token = await _authService.getToken();
+      if (token == null) return;
+
       final response = await http.get(
         Uri.parse('${Constants.apiUrl}/chats'),
         headers: {'Authorization': 'Bearer $token'},
+      ).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Backend not responding (10s timeout)');
+        },
       );
 
       if (response.statusCode == 200) {
         final List<dynamic> fetchedChats = jsonDecode(response.body);
-        setState(() {
-          _chats = fetchedChats;
-        });
+        if (mounted) {
+          setState(() {
+            _chats = fetchedChats;
+            _errorMessage = null; 
+          });
+        }
 
         // Save to local database
         for (var chat in fetchedChats) {
           await DatabaseService().saveChat(chat);
         }
+      } else if (response.statusCode == 401) {
+        _logout();
       }
     } catch (e) {
       print('Error fetching chats: $e');
+      if (mounted && _chats.isEmpty) {
+         setState(() => _errorMessage = 'Failed to load chats: $e');
+      }
     }
   }
 
@@ -130,7 +229,43 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Connecting to AkonaChat...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_errorMessage != null && _chats.isEmpty) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
+                SizedBox(height: 16),
+                Text('Connection Error', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                SizedBox(height: 8),
+                Text(_errorMessage!, textAlign: TextAlign.center),
+                SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _initApp,
+                  child: Text('Retry Connection'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     return Scaffold(

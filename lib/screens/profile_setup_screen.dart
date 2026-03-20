@@ -69,7 +69,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       ));
 
       final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
+      final response = await http.Response.fromStream(streamedResponse).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -120,7 +120,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           'about': about,
           'profilePic': _user?.profilePic,
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         // Update local user data

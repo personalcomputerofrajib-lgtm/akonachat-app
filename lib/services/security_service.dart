@@ -91,7 +91,7 @@ class SecurityService {
         'Authorization': 'Bearer $token'
       },
       body: jsonEncode(payload)
-    );
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode != 200) {
       throw Exception('Failed to upload security bundle to server: ${response.body}');
@@ -104,7 +104,7 @@ class SecurityService {
     final response = await http.get(
       Uri.parse('${Constants.apiUrl}/keys/fetch/$userId'),
       headers: {'Authorization': 'Bearer $token'}
-    );
+    ).timeout(const Duration(seconds: 15));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
