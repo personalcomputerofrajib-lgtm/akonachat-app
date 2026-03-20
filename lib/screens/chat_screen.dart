@@ -21,6 +21,9 @@ import 'media_gallery_screen.dart';
 import 'package:dio/dio.dart';
 import 'package:gal/gal.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../services/session_service.dart';
+import '../services/encryption_service.dart';
+import '../services/security_service.dart';
 import '../widgets/full_screen_image_viewer.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -52,6 +55,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Map<String, String?> _localMediaPaths = {};
   
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final SecurityService _securityService = SecurityService();
+  final SessionService _sessionService = SessionService();
+  final EncryptionService _encryptionService = EncryptionService();
+  
   bool _isRecording = false;
   String? _recordingPath;
 
@@ -136,37 +143,73 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_socket != null) {
       _socket!.emit('join', {'chatId': widget.chatId});
       _socket!.emit('read_chat', {'chatId': widget.chatId});
+      
+      // Periodically check for key replenishment
+      _securityService.checkAndReplenishPreKeys();
+      
+      // Load from local secure storage first
+      final localMsgs = await DatabaseService().getMessages(widget.chatId);
+      if (mounted) {
+        setState(() {
+          _messages.clear();
+          _messages.addAll(localMsgs);
+        });
+      }
+      
       _syncMessages();
 
-      _socket!.on('receive_message', (data) {
-      if (mounted && data['chatId'] == widget.chatId) {
-        setState(() {
-          // Deduplication: Check if we already have this message (optimistic UI)
-          final String? clientMsgId = data['clientMsgId'];
-          if (clientMsgId != null) {
-            final existingIndex = _messages.indexWhere((m) => m['clientMsgId'] == clientMsgId);
-            if (existingIndex != -1) {
-              // Update existing local message with server data
-              _messages[existingIndex]['_id'] = data['_id'];
-              _messages[existingIndex]['status'] = data['status'] ?? 'sent';
-              _messages[existingIndex]['sequence'] = data['sequence'];
-              // IMPORTANT: Update senderId from server to ensure it's accurate and populated
-              _messages[existingIndex]['senderId'] = data['senderId'];
-              return;
+      _socket!.on('receive_message', (data) async {
+        if (mounted && data['chatId'] == widget.chatId) {
+          String decryptedText = data['ciphertext'] ?? '';
+          
+          // 1. Decrypt if it's an encrypted message from the other user
+          if (data['senderId'] != null && 
+              data['senderId']['_id'] != _currentUser?.id && 
+              data['signalType'] != null) {
+            try {
+              decryptedText = await _sessionService.decryptMessage(
+                data['senderId']['_id'], 
+                {
+                  'body': data['ciphertext'],
+                  'type': data['signalType']
+                }
+              );
+            } catch (e) {
+              print('Decryption Error: $e');
+              decryptedText = '[Encrypted Message - Use "Reset Session" if persistent]';
             }
           }
 
-          // If it's from me but didn't have a matching clientMsgId (unlikely but safe)
-          // or if it's from the other user, add it to the list.
-          _messages.insert(0, data);
-          _scrollToBottom();
-        });
-        
-          _socket!.emit('read_chat', {'chatId': widget.chatId});
-          
-          // Play receive sound if it's from the other user
-          if (data['senderId'] != null && data['senderId']['_id'] != _currentUser?.id) {
-            _notificationPlayer.play(AssetSource('sounds/receive.mp3'));
+          if (mounted) {
+            setState(() {
+              // Deduplication: Check if we already have this message (optimistic UI)
+              final String? clientMsgId = data['clientMsgId'];
+              if (clientMsgId != null) {
+                final existingIndex = _messages.indexWhere((m) => m['clientMsgId'] == clientMsgId);
+                if (existingIndex != -1) {
+                  // Update existing local message with server data
+                  _messages[existingIndex] = Map<String, dynamic>.from(data);
+                  _messages[existingIndex]['ciphertext'] = decryptedText;
+                  return;
+                }
+              }
+
+              // Normal add for new messages
+              final newMsg = Map<String, dynamic>.from(data);
+              newMsg['ciphertext'] = decryptedText;
+              _messages.insert(0, newMsg);
+              
+              // Persist locally
+              await DatabaseService().saveMessage(newMsg);
+              _scrollToBottom();
+            });
+
+            _socket!.emit('read_chat', {'chatId': widget.chatId});
+
+            // Play receive sound if it's from the other user
+            if (data['senderId'] != null && data['senderId']['_id'] != _currentUser?.id) {
+              _notificationPlayer.play(AssetSource('sounds/receive.mp3'));
+            }
           }
         }
       });
@@ -310,7 +353,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _socket!.emit('sync', {'chatId': widget.chatId, 'lastSequence': lastSeq});
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
     if (_socket == null || _currentUser == null) return;
 
@@ -318,27 +361,38 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
 
     final String clientMsgId = _uuid.v4();
-    final msgData = {
-      'chatId': widget.chatId,
-      'ciphertext': text,
-      'iv': 'base64_iv_placeholder',
-      'clientMsgId': clientMsgId,
-    };
-
+    
     _notificationPlayer.play(AssetSource('sounds/send.mp3'));
-    _socket!.emit('send_message', msgData);
 
-    setState(() {
-      _messages.insert(0, {
+    try {
+      if (_otherUser == null) return;
+      // 1. Encrypt text via Signal Protocol
+      final encryptedBody = await _sessionService.encryptMessage(_otherUser!.id, text);
+      
+      final msgData = {
         'chatId': widget.chatId,
-        'senderId': {'_id': _currentUser!.id},
-        'ciphertext': text,
+        'ciphertext': encryptedBody['body'],
+        'signalType': encryptedBody['type'], // PreKey or Signal message
         'clientMsgId': clientMsgId,
-        'createdAt': DateTime.now().toIso8601String(),
-        'status': 'sent'
+      };
+
+      _socket!.emit('send_message', msgData);
+
+      setState(() {
+        _messages.insert(0, {
+          'chatId': widget.chatId,
+          'senderId': {'_id': _currentUser!.id},
+          'ciphertext': text, // Keep plaintext for local display
+          'clientMsgId': clientMsgId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'status': 'sent'
+        });
+        _scrollToBottom();
       });
-      _scrollToBottom();
-    });
+    } catch (e) {
+      print('Encryption Error: $e');
+      // Fallback or show error
+    }
   }
 
   Future<void> _startRecording() async {
@@ -369,16 +423,26 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _uploadVoice(File file) async {
-    if (_socket == null || _currentUser == null) return;
+    if (_socket == null || _currentUser == null || _otherUser == null) return;
     setState(() => _isUploading = true);
     try {
+      // 1. Encrypt voice file content (AES-256-GCM)
+      final bytes = await file.readAsBytes();
+      final encryptedData = await _encryptionService.encryptMedia(bytes);
+      
+      // Save encrypted bytes to a temporary file for upload
+      final directory = await getTemporaryDirectory();
+      final encryptedFile = File('${directory.path}/enc_voice_${DateTime.now().millisecondsSinceEpoch}.bin');
+      await encryptedFile.writeAsBytes(base64Decode(encryptedData['ciphertext']!));
+
+      // 2. Upload Encrypted File
       final token = await AuthService().getToken();
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('${Constants.apiUrl}/media/upload'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+      request.files.add(await http.MultipartFile.fromPath('file', encryptedFile.path));
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
@@ -387,14 +451,28 @@ class _ChatScreenState extends State<ChatScreen> {
         final data = jsonDecode(response.body);
         final voiceUrl = data['url'];
         
+        // 3. Prepare Media Metadata (Key, Nonce, Mac)
+        final mediaMetadata = {
+          'key': encryptedData['key'],
+          'nonce': encryptedData['nonce'],
+          'mac': encryptedData['mac'],
+        };
+
+        // 4. Encrypt Metadata via Signal Protocol
+        final encryptedMeta = await _sessionService.encryptMessage(
+          _otherUser!.id, 
+          jsonEncode(mediaMetadata)
+        );
+        
         final String clientMsgId = _uuid.v4();
         _notificationPlayer.play(AssetSource('sounds/send.mp3'));
+
         _socket!.emit('send_message', {
           'chatId': widget.chatId,
           'type': 'voice',
           'mediaUrl': voiceUrl,
-          'ciphertext': '[Voice Message]',
-          'iv': 'voice_iv_placeholder',
+          'ciphertext': encryptedMeta['body'],
+          'signalType': encryptedMeta['type'],
           'clientMsgId': clientMsgId,
         });
 
@@ -404,7 +482,7 @@ class _ChatScreenState extends State<ChatScreen> {
             'senderId': {'_id': _currentUser!.id},
             'type': 'voice',
             'mediaUrl': voiceUrl,
-            'ciphertext': '[Voice Message]',
+            'ciphertext': '[Voice Message]', // Local display
             'clientMsgId': clientMsgId,
             'createdAt': DateTime.now().toIso8601String(),
             'status': 'sent'
@@ -413,7 +491,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       }
     } catch (e) {
-      print('Voice upload error: $e');
+      print('Encrypted Voice upload error: $e');
     } finally {
       setState(() => _isUploading = false);
     }
@@ -431,43 +509,67 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _uploadMedia(File file) async {
-    if (_socket == null || _currentUser == null) return;
+    if (_socket == null || _currentUser == null || _otherUser == null) return;
     
     setState(() => _isUploading = true);
     try {
+      // 1. Encrypt Media file content (AES-256-GCM)
+      final bytes = await file.readAsBytes();
+      final encryptedData = await _encryptionService.encryptMedia(bytes);
+      
+      // Save encrypted bytes to a temporary file
+      final directory = await getTemporaryDirectory();
+      final encryptedFile = File('${directory.path}/enc_media_${DateTime.now().millisecondsSinceEpoch}.bin');
+      await encryptedFile.writeAsBytes(base64Decode(encryptedData['ciphertext']!));
+
+      // 2. Upload Encrypted File
       final token = await AuthService().getToken();
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('${Constants.apiUrl}/media/upload'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+      request.files.add(await http.MultipartFile.fromPath('file', encryptedFile.path));
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final imageUrl = data['url'];
+        final mediaUrl = data['url'];
         
-        final String clientMsgId = _uuid.v4();
-        final msgData = {
-          'chatId': widget.chatId,
-          'ciphertext': '[Image]', // Placeholder text for E2EE or display
-          'mediaUrl': imageUrl,
-          'iv': 'base64_iv_placeholder',
-          'clientMsgId': clientMsgId,
+        // 3. Prepare Media Metadata (Key, Nonce, Mac)
+        final mediaMetadata = {
+          'key': encryptedData['key'],
+          'nonce': encryptedData['nonce'],
+          'mac': encryptedData['mac'],
         };
 
+        // 4. Encrypt Metadata via Signal Protocol
+        final encryptedMeta = await _sessionService.encryptMessage(
+          _otherUser!.id, 
+          jsonEncode(mediaMetadata)
+        );
+        
+        final String clientMsgId = _uuid.v4();
         _notificationPlayer.play(AssetSource('sounds/send.mp3'));
-    _socket!.emit('send_message', msgData);
+
+        _socket!.emit('send_message', {
+          'chatId': widget.chatId,
+          'type': 'image', // Or handle video
+          'mediaUrl': mediaUrl,
+          'ciphertext': encryptedMeta['body'],
+          'signalType': encryptedMeta['type'],
+          'clientMsgId': clientMsgId,
+        });
 
         setState(() {
           _messages.insert(0, {
             'chatId': widget.chatId,
             'senderId': {'_id': _currentUser!.id},
-            'ciphertext': '[Image]',
-            'mediaUrl': imageUrl,
+            'type': 'image',
+            'mediaUrl': mediaUrl,
+            'ciphertext': '[Media]', // Local display
             'clientMsgId': clientMsgId,
             'createdAt': DateTime.now().toIso8601String(),
             'status': 'sent'
@@ -476,7 +578,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
       }
     } catch (e) {
-      print('Upload error: $e');
+      print('Encrypted Media upload error: $e');
     } finally {
       setState(() => _isUploading = false);
     }
@@ -684,7 +786,25 @@ class _ChatScreenState extends State<ChatScreen> {
             icon: Icon(Icons.palette_outlined),
             onPressed: _showCustomizationMenu,
           ),
-          IconButton(icon: Icon(Icons.more_vert), onPressed: () {}),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'reset_session') {
+                _resetSecureSession();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'reset_session',
+                child: Row(
+                  children: [
+                    Icon(Icons.security_update_warning, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Reset Secure Session'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: Container(
@@ -898,7 +1018,12 @@ class _ChatScreenState extends State<ChatScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if ((type == 'voice' || type == 'mp3') && mediaUrl != null)
-                        _VoicePlayer(url: mediaUrl, isMe: isMe, isMp3: type == 'mp3')
+                        _VoicePlayer(
+                          url: mediaUrl, 
+                          localPath: _localMediaPaths[msgId],
+                          isMe: isMe, 
+                          isMp3: type == 'mp3'
+                        )
                       else if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8.0),
@@ -906,14 +1031,21 @@ class _ChatScreenState extends State<ChatScreen> {
                             borderRadius: BorderRadius.circular(12),
                             child: Hero(
                               tag: mediaUrl,
-                              child: CachedNetworkImage(
-                                imageUrl: mediaUrl,
-                                height: 200,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(height: 200, color: Colors.grey[200], child: Center(child: CircularProgressIndicator())),
-                                errorWidget: (context, url, error) => Icon(Icons.error),
-                              ),
+                              child: _localMediaPaths.containsKey(msgId)
+                                ? Image.file(
+                                    File(_localMediaPaths[msgId]!),
+                                    height: 200,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  )
+                                : CachedNetworkImage(
+                                    imageUrl: mediaUrl,
+                                    height: 200,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(height: 200, color: Colors.grey[200], child: Center(child: CircularProgressIndicator())),
+                                    errorWidget: (context, url, error) => Icon(Icons.error),
+                                  ),
                             ),
                           ),
                         ),
@@ -953,7 +1085,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     Positioned(
                       right: 0, bottom: 0,
                       child: GestureDetector(
-                        onTap: () => _downloadMedia(msgId, mediaUrl),
+                        onTap: () => _downloadAndDecryptMedia(msg),
                         child: CircleAvatar(
                           radius: 12,
                           backgroundColor: Colors.black54,
@@ -991,29 +1123,65 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Future<void> _downloadMedia(String msgId, String url) async {
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final fileName = url.split('/').last;
-      final savePath = '${appDir.path}/$fileName';
+  Future<void> _downloadAndDecryptMedia(Map<String, dynamic> msg) async {
+    final String msgId = msg['_id'] ?? msg['clientMsgId'] ?? '';
+    final String? encryptedUrl = msg['mediaUrl'];
+    if (encryptedUrl == null || msgId.isEmpty) return;
 
+    try {
       setState(() => _downloadProgress[msgId] = 0);
+
+      // 1. Decrypt Media Metadata (Signal Protocol)
+      final decryptedMetaStr = await _sessionService.decryptMessage(
+        msg['senderId'] is Map ? msg['senderId']['_id'] : msg['senderId'].toString(), 
+        {
+          'body': msg['ciphertext'],
+          'type': msg['signalType']
+        }
+      );
+      final meta = jsonDecode(decryptedMetaStr);
+
+      // 2. Download Encrypted Blob
+      final tempDir = await getTemporaryDirectory();
+      final encPath = '${tempDir.path}/enc_${msgId}.bin';
       
-      await Dio().download(url, savePath, onReceiveProgress: (count, total) {
+      await Dio().download(encryptedUrl, encPath, onReceiveProgress: (count, total) {
         if (total != -1) {
           setState(() => _downloadProgress[msgId] = count / total);
         }
       });
 
+      // 3. Decrypt Blob (AES-256-GCM)
+      final encFile = File(encPath);
+      final encBytes = await encFile.readAsBytes();
+      
+      final clearBytes = await _encryptionService.decryptMedia(
+        ciphertext: base64Encode(encBytes), 
+        nonce: meta['nonce'],
+        mac: meta['mac'],
+        keyBase64: meta['key'],
+      );
+
+      // 4. Save Decrypted File
+      final appDir = await getApplicationDocumentsDirectory();
+      final ext = msg['type'] == 'voice' ? 'm4a' : 'jpg';
+      final decryptedPath = '${appDir.path}/dec_${msgId}.$ext';
+      final decFile = File(decryptedPath);
+      await decFile.writeAsBytes(clearBytes);
+
       setState(() {
         _downloadProgress.remove(msgId);
-        _localMediaPaths[msgId] = savePath;
+        _localMediaPaths[msgId] = decryptedPath;
       });
+
+      // Cleanup encrypted temp file
+      if (await encFile.exists()) await encFile.delete();
       
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Downloaded locally')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Decrypted and ready')));
     } catch (e) {
-      print('Download error: $e');
+      print('Download/Decrypt error: $e');
       setState(() => _downloadProgress.remove(msgId));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to decrypt media')));
     }
   }
 
@@ -1105,14 +1273,41 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+
+  Future<void> _resetSecureSession() async {
+    if (_otherUser == null) return;
+    
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset Secure Session?'),
+        content: Text('This will clear the current encryption state with this user. Use this only if messages are failing to decrypt.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: Text('Reset', style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _sessionService.resetSession(_otherUser!.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Secure session reset. Next message will start a new handshake.'))
+      );
+    }
+  }
 }
 
 
 class _VoicePlayer extends StatefulWidget {
-  final String url;
+  final String? url;
+  final String? localPath;
   final bool isMe;
   final bool isMp3;
-  const _VoicePlayer({Key? key, required this.url, required this.isMe, this.isMp3 = false}) : super(key: key);
+  const _VoicePlayer({Key? key, this.url, this.localPath, required this.isMe, this.isMp3 = false}) : super(key: key);
 
   @override
   _VoicePlayerState createState() => _VoicePlayerState();
@@ -1143,7 +1338,11 @@ class _VoicePlayerState extends State<_VoicePlayer> {
     if (_isPlaying) {
       await _player.pause();
     } else {
-      await _player.play(UrlSource(widget.url));
+      if (widget.localPath != null) {
+        await _player.play(DeviceFileSource(widget.localPath!));
+      } else if (widget.url != null) {
+        await _player.play(UrlSource(widget.url!));
+      }
     }
     if(mounted) setState(() => _isPlaying = !_isPlaying);
   }

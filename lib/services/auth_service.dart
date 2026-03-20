@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/constants.dart';
 import '../models/user_model.dart';
+import 'security_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -42,6 +43,14 @@ class AuthService {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(Constants.tokenKey, token);
         await prefs.setString(Constants.userKey, jsonEncode(user.toJson()));
+
+        // 5. Initialize Encryption Keys (Signal Protocol)
+        try {
+          await SecurityService().initializeKeys();
+        } catch (e) {
+          print("Security Key Initialization Error: $e");
+          // Non-blocking but should be logged.
+        }
 
         return {
           'user': user,
