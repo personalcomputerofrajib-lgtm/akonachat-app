@@ -83,9 +83,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-    }
-  }
-
   Future<void> _loadLocalChats() async {
     final localChats = await DatabaseService().getChats();
     if (localChats.isNotEmpty && mounted) {

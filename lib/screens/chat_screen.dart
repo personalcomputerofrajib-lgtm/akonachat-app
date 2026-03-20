@@ -191,11 +191,11 @@ class _ChatScreenState extends State<ChatScreen> {
               final newMsg = Map<String, dynamic>.from(data);
               newMsg['ciphertext'] = decryptedText;
               _messages.insert(0, newMsg);
-              
-              // Persist locally
-              await DatabaseService().saveMessage(newMsg);
               _scrollToBottom();
             });
+
+            // Persist locally - OUTSIDE setState
+            await DatabaseService().saveMessage(Map<String, dynamic>.from(data)..['ciphertext'] = decryptedText);
 
             _socket!.emit('read_chat', {'chatId': widget.chatId});
 
@@ -420,19 +420,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
       _socket!.emit('send_message', msgData);
 
+      final msg = {
+        'chatId': widget.chatId,
+        'senderId': {'_id': _currentUser!.id},
+        'ciphertext': text, // Keep plaintext for local display
+        'clientMsgId': clientMsgId,
+        'createdAt': DateTime.now().toIso8601String(),
+        'status': 'sent'
+      };
+
       setState(() {
-        final msg = {
-          'chatId': widget.chatId,
-          'senderId': {'_id': _currentUser!.id},
-          'ciphertext': text, // Keep plaintext for local display
-          'clientMsgId': clientMsgId,
-          'createdAt': DateTime.now().toIso8601String(),
-          'status': 'sent'
-        };
         _messages.insert(0, msg);
-        DatabaseService().saveMessage(msg); // Persist locally
         _scrollToBottom();
       });
+
+      // Persist locally - OUTSIDE setState
+      await DatabaseService().saveMessage(msg);
     } catch (e) {
       print('Encryption Error: $e');
       // Fallback or show error
@@ -522,21 +525,24 @@ class _ChatScreenState extends State<ChatScreen> {
           'clientMsgId': clientMsgId,
         });
 
+        final msg = {
+          'chatId': widget.chatId,
+          'senderId': {'_id': _currentUser!.id},
+          'type': 'voice',
+          'mediaUrl': voiceUrl,
+          'ciphertext': '[Voice Message]', // Local display
+          'clientMsgId': clientMsgId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'status': 'sent'
+        };
+
         setState(() {
-          final msg = {
-            'chatId': widget.chatId,
-            'senderId': {'_id': _currentUser!.id},
-            'type': 'voice',
-            'mediaUrl': voiceUrl,
-            'ciphertext': '[Voice Message]', // Local display
-            'clientMsgId': clientMsgId,
-            'createdAt': DateTime.now().toIso8601String(),
-            'status': 'sent'
-          };
           _messages.insert(0, msg);
-          DatabaseService().saveMessage(msg); // Persist locally
           _scrollToBottom();
         });
+
+        // Persist locally - OUTSIDE setState
+        await DatabaseService().saveMessage(msg);
       }
     } catch (e) {
       print('Encrypted Voice upload error: $e');
@@ -602,30 +608,35 @@ class _ChatScreenState extends State<ChatScreen> {
         final String clientMsgId = _uuid.v4();
         _notificationPlayer.play(AssetSource('sounds/send.mp3'));
 
-        _socket!.emit('send_message', {
+        final msgData = {
           'chatId': widget.chatId,
           'type': 'image', // Or handle video
           'mediaUrl': mediaUrl,
           'ciphertext': encryptedMeta['body'],
           'signalType': encryptedMeta['type'],
           'clientMsgId': clientMsgId,
-        });
+        };
+
+        _socket!.emit('send_message', msgData);
+
+        final msg = {
+          'chatId': widget.chatId,
+          'senderId': {'_id': _currentUser!.id},
+          'type': 'image',
+          'mediaUrl': mediaUrl,
+          'ciphertext': '[Image Message]', // Local display
+          'clientMsgId': clientMsgId,
+          'createdAt': DateTime.now().toIso8601String(),
+          'status': 'sent'
+        };
 
         setState(() {
-          final msg = {
-            'chatId': widget.chatId,
-            'senderId': {'_id': _currentUser!.id},
-            'type': 'image',
-            'mediaUrl': mediaUrl,
-            'ciphertext': '[Media]', // Local display
-            'clientMsgId': clientMsgId,
-            'createdAt': DateTime.now().toIso8601String(),
-            'status': 'sent'
-          };
           _messages.insert(0, msg);
-          DatabaseService().saveMessage(msg); // Persist locally
           _scrollToBottom();
         });
+
+        // Persist locally - OUTSIDE setState
+        await DatabaseService().saveMessage(msg);
       }
     } catch (e) {
       print('Encrypted Media upload error: $e');
