@@ -632,7 +632,10 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           Divider(),
-          if (isMe && !(msg['isDeletedEveryone'] == true)) ...[              title: Text('Edit Message'),
+          if (isMe && !(msg['isDeletedEveryone'] == true))
+            ListTile(
+              leading: Icon(Icons.edit, color: Colors.blue),
+              title: Text('Edit Message'),
               onTap: () {
                 Navigator.pop(context);
                 _editMessagePrompt(msg);
@@ -886,15 +889,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   
                   return GestureDetector(
                     onLongPress: () => _showOptions(msg, isMe),
-                    child: _buildMessageBubble(
-                      msg['isDeletedEveryone'] == true ? 'This message was deleted' : (msg['ciphertext'] ?? ''), 
-                      isMe, 
-                      msg['status'] ?? 'sent',
-                      msg['isDeletedEveryone'] == true ? null : msg['mediaUrl'],
-                      msg['isEdited'] ?? false,
-                      msg['reactions'],
-                      msg['type'] ?? 'text',
-                    ),
+                    child: _buildMessageBubble(msg, isMe),
                   );
                 },
               ),
@@ -999,7 +994,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(Map<String, dynamic> msg, bool isMe) {
-    final text = msg['ciphertext'] ?? '';
+    final text = msg['isDeletedEveryone'] == true 
+        ? 'This message was deleted' 
+        : (msg['ciphertext'] ?? '');
     final status = msg['status'] ?? 'sent';
     final mediaUrl = msg['mediaUrl'];
     final isEdited = msg['isEdited'] ?? false;
