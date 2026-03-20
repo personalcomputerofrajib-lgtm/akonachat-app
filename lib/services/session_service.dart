@@ -50,7 +50,7 @@ class SessionService {
     
     late CiphertextMessage message;
     if (encryptedData['type'] == CiphertextMessage.prekeyType) {
-      message = PreKeySignalMessage.fromSerialized(ciphertextBytes);
+      message = PreKeySignalMessage(ciphertextBytes);
     } else {
       message = SignalMessage.fromSerialized(ciphertextBytes);
     }
