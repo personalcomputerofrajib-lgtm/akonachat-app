@@ -9,6 +9,7 @@ import 'login_screen.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'user_search_screen.dart';
+import 'settings_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   @override
@@ -161,6 +162,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
               title: Text('Settings'),
               onTap: () {
                 Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => SettingsScreen()),
+                );
               },
             ),
             Spacer(),
@@ -182,13 +187,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
         ),
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.grey[900] : Colors.white,
+        foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _fetchChats,
-          )
+          ),
+          IconButton(
+            icon: Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen())),
+          ),
         ],
       ),
       body: _chats.isEmpty

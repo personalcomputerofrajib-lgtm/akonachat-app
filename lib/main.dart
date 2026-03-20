@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/chat_list_screen.dart';
 import 'screens/username_setup_screen.dart';
 import 'services/auth_service.dart';
+import 'services/theme_service.dart';
 import 'models/user_model.dart';
 
 void main() {
-  runApp(const AkonaChatApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeService(),
+      child: const AkonaChatApp(),
+    ),
+  );
 }
 
 class AkonaChatApp extends StatelessWidget {
@@ -14,14 +21,32 @@ class AkonaChatApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeService = Provider.of<ThemeService>(context);
+    
     return MaterialApp(
       title: 'AkonaChat',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        brightness: Brightness.light,
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.grey[50],
-        fontFamily: 'Inter', // We can add fonts later, defaults to system sans
+        appBarTheme: const AppBarTheme(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
       ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.black,
+        appBarTheme: AppBarTheme(
+          elevation: 0,
+          backgroundColor: Colors.grey[900],
+          foregroundColor: Colors.white,
+        ),
+      ),
+      themeMode: themeService.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       home: AuthWrapper(),
     );
   }
