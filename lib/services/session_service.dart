@@ -50,9 +50,9 @@ class SessionService {
     
     late CiphertextMessage message;
     if (encryptedData['type'] == CiphertextMessage.prekeyType) {
-      message = PreKeySignalMessage(ciphertextBytes);
+      message = PreKeySignalMessage.fromSerialized(ciphertextBytes);
     } else {
-      message = SignalMessage(ciphertextBytes);
+      message = SignalMessage.fromSerialized(ciphertextBytes);
     }
 
     final decryptedBytes = await cipher.decrypt(message as dynamic);

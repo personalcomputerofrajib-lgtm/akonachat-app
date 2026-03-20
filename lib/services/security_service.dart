@@ -44,14 +44,14 @@ class SecurityService {
 
   Future<void> _generateAndUploadNewKeys() async {
     // 1. Generate Identity Key Pair
-    final identityKeyPair = KeyHelper.generateIdentityKeyPair();
-    final registrationId = KeyHelper.generateRegistrationId(false);
+    final identityKeyPair = generateIdentityKeyPair();
+    final registrationId = generateRegistrationId(false);
     
     // 2. Generate Signed Pre-Key
-    final signedPreKey = KeyHelper.generateSignedPreKey(identityKeyPair, 1);
+    final signedPreKey = generateSignedPreKey(identityKeyPair, 1);
     
     // 3. Generate One-Time Pre-Keys (Batch of 100)
-    final oneTimePreKeys = KeyHelper.generatePreKeys(0, 100);
+    final oneTimePreKeys = generatePreKeys(0, 100);
     
     // 4. Persist Keys Locally (Encrypted via SecureStorage)
     await _storage.write(key: _identityKeyPairKey, value: base64Encode(identityKeyPair.serialize()));
@@ -150,10 +150,10 @@ class SecurityService {
       
       // New Signed Pre-Key
       final newSignedId = (timestamp % 1000) + 1; // Simple incrementing ID
-      final signedPreKey = KeyHelper.generateSignedPreKey(identityKeyPair, newSignedId);
+      final signedPreKey = generateSignedPreKey(identityKeyPair, newSignedId);
       
       // New One-Time Pre-Keys
-      final oneTimePreKeys = KeyHelper.generatePreKeys(lastId + 1, 100);
+      final oneTimePreKeys = generatePreKeys(lastId + 1, 100);
       final newLastId = lastId + 100;
 
       // Update storage
