@@ -146,7 +146,7 @@ class SecurityService {
     if (needsSignedRotation) {
       final identityData = await _storage.read(key: _identityKeyPairKey);
       if (identityData == null) return;
-      final identityKeyPair = IdentityKeyPair.fromBuffer(base64Decode(identityData));
+      final identityKeyPair = IdentityKeyPair.fromSerialized(base64Decode(identityData));
       
       // New Signed Pre-Key
       final newSignedId = (timestamp % 1000) + 1; // Simple incrementing ID
