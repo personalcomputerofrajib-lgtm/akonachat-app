@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../services/auth_service.dart';
 import 'chat_list_screen.dart';
 import 'username_setup_screen.dart';
@@ -14,27 +15,43 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _handleLogin() async {
     setState(() => _isLoading = true);
-    final result = await _authService.signInWithGoogle();
     
-    if (!mounted) return;
-    
-    if (result != null) {
-      if (result['requiresUsername'] == true) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => UsernameSetupScreen()),
-        );
+    try {
+      final result = await Future.any([
+        _authService.signInWithGoogle(),
+        Future.delayed(const Duration(seconds: 30), () {
+          throw TimeoutException('Google sign-in took too long (30s)');
+        }),
+      ]);
+      
+      if (!mounted) return;
+      
+      if (result != null) {
+        if (result['requiresUsername'] == true) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => UsernameSetupScreen()),
+          );
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => ChatListScreen()),
+          );
+        }
       } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => ChatListScreen()),
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign in failed. Please try again.')),
         );
       }
-    } else {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sign in failed. Please try again.')),
-      );
+    } catch (e) {
+      print('❌ Login error: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login error: $e')),
+        );
+      }
     }
   }
 

@@ -8,12 +8,23 @@ class SocketService {
   factory SocketService() => _instance;
   SocketService._internal();
 
-  IO.Socket? _socket;
-  bool _isConnected = false;
   String? _connectionError;
+  bool _timeoutOccurred = false;
+
+  /// Reset service state to allow for a fresh connection attempt
+  void reset() {
+    _socket?.disconnect();
+    _socket = null;
+    _isConnected = false;
+    _connectionError = null;
+    _timeoutOccurred = false;
+    print('🔄 Socket service reset');
+  }
 
   /// Connect to Socket.IO server with timeout and error handling
   Future<bool> connect() async {
+    _timeoutOccurred = false;
+    
     if (_socket != null && _socket!.connected) {
       _isConnected = true;
       return true;
@@ -27,7 +38,7 @@ class SocketService {
 
     try {
       _socket = IO.io(Constants.serverUrl, <String, dynamic>{
-        'transports': ['websocket'],
+        'transports': ['websocket', 'polling'],
         'autoConnect': false,
         'forceNew': true,
         'auth': {'token': token},
@@ -43,18 +54,20 @@ class SocketService {
       // Connect with timeout
       final completer = Completer<bool>();
       
-      // Timeout after 15 seconds
-      final timeoutTimer = Timer(Duration(seconds: 15), () {
-        if (!completer.isCompleted) {
-          _connectionError = 'Socket connection timeout (15s)';
+      // Timeout after 5 seconds
+      final timeoutTimer = Timer(Duration(seconds: 5), () {
+        if (!completer.isCompleted && !_timeoutOccurred) {
+          _timeoutOccurred = true;
+          _connectionError = 'Socket connection timeout (5s)';
           _socket?.disconnect();
           completer.complete(false);
+          print('⏰ Socket connection timeout (5s)');
         }
       });
 
       // Listen for connection success
       _socket!.onConnect((_) {
-        if (!completer.isCompleted) {
+        if (!completer.isCompleted && !_timeoutOccurred) {
           timeoutTimer.cancel();
           _isConnected = true;
           _connectionError = null;
@@ -65,7 +78,7 @@ class SocketService {
 
       // Listen for connection error
       _socket!.onConnectError((error) {
-        if (!completer.isCompleted) {
+        if (!completer.isCompleted && !_timeoutOccurred) {
           timeoutTimer.cancel();
           _isConnected = false;
           _connectionError = 'Connection error: $error';

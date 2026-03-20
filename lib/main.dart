@@ -69,12 +69,22 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _checkAuth() async {
-    final user = await _authService.loadUser();
-    if (mounted) {
-      setState(() {
-        _user = user;
-        _isLoading = false;
-      });
+    try {
+      final user = await _authService.loadUser();
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Auth check error: $e');
+      if (mounted) {
+        setState(() {
+          _user = null;
+          _isLoading = false;
+        });
+      }
     }
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/constants.dart';
@@ -37,75 +38,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
         _isLoading = true;
         _errorMessage = null;
       });
-      
-      final user = await _authService.loadUser();
-      setState(() => _currentUser = user);
 
-      if (user != null) {
-        final socketService = SocketService();
-        print('🔄 Attempting socket connection...');
-        final socketConnected = await socketService.connect();
-
-        if (!mounted) return;
-
-        if (!socketConnected) {
-          final errorMsg = socketService.lastError ?? 'Socket connection failed';
-          print('❌ Socket connection failed: $errorMsg');
-          setState(() {
-            _errorMessage = 'Connection Error: $errorMsg';
-            _isLoading = false;
-          });
-          _showRetryDialog(errorMsg);
-          return;
-        }
-
-        print('✅ Socket connected successfully');
-        final socket = socketService.socket;
-        
-        // Load from local DB first
-        await _loadLocalChats();
-        
-        // Then fetch from server
-        await _fetchChats();
-
-        // Listen for real-time updates
-        socket?.on('receive_message', (data) {
-          if (mounted) {
-            _fetchChats();
-          }
-        });
-
-        socket?.on('message_status', (data) {
-          if (mounted) {
-            _fetchChats();
-          }
-        });
-
-        socket?.on('presence', (data) {
-          if (mounted) {
-            setState(() {
-              final userId = data['userId'];
-              final isOnline = data['isOnline'];
-              for (var chat in _chats) {
-                final participants = chat['participants'] as List;
-                for (var p in participants) {
-                  if (p['_id'] == userId) {
-                    p['isOnline'] = isOnline;
-                    p['lastSeen'] = data['lastSeen'];
-                  }
-                }
-              }
-            });
-          }
-        });
-      } else {
-        // Go back to login if no user
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => LoginScreen()),
-        );
-      }
+      // Add a global timeout to prevent infinite loading
+      await Future.any([
+        _initAppInternal(),
+        Future.delayed(const Duration(seconds: 30), () {
+          throw TimeoutException('App initialization took too long (30s)');
+        }),
+      ]);
     } catch (e) {
       print('❌ Initialization error: $e');
       if (mounted) {
@@ -113,37 +53,128 @@ class _ChatListScreenState extends State<ChatListScreen> {
           _errorMessage = 'Initialization error: $e';
           _isLoading = false;
         });
+        
+        // Try to load local chats as fallback even on complete failure
+        if (_chats.isEmpty) {
+          await _loadLocalChats();
+        }
+        
         _showRetryDialog(e.toString());
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        // Only set to false if we're not showing an error or if we have data
+        if (_errorMessage == null || _chats.isNotEmpty) {
+          setState(() => _isLoading = false);
+        }
       }
+    }
+  }
+
+  Future<void> _initAppInternal() async {
+    final user = await _authService.loadUser();
+    if (!mounted) return;
+    setState(() => _currentUser = user);
+
+    if (user != null) {
+      final socketService = SocketService();
+      // Ensure we start with a fresh socket state if we previously failed
+      socketService.reset();
+      
+      print('🔄 Attempting socket connection...');
+      final socketConnected = await socketService.connect();
+
+      if (!mounted) return;
+
+      if (!socketConnected) {
+        final errorMsg = socketService.lastError ?? 'Socket connection failed';
+        print('❌ Socket connection failed: $errorMsg');
+        
+        // Try to load local chats as fallback
+        await _loadLocalChats();
+        
+        setState(() {
+          _errorMessage = 'Connection Error: $errorMsg';
+          _isLoading = false;
+        });
+        _showRetryDialog(errorMsg);
+        return;
+      }
+
+      print('✅ Socket connected successfully');
+      final socket = socketService.socket;
+      
+      // Load from local DB first
+      await _loadLocalChats();
+      
+      // Then fetch from server
+      await _fetchChats();
+
+      // Listen for real-time updates
+      socket?.on('receive_message', (data) {
+        if (mounted) {
+          _fetchChats();
+        }
+      });
+
+      socket?.on('message_status', (data) {
+        if (mounted) {
+          _fetchChats();
+        }
+      });
+
+      socket?.on('presence', (data) {
+        if (mounted) {
+          setState(() {
+            final userId = data['userId'];
+            final isOnline = data['isOnline'];
+            for (var chat in _chats) {
+              final participants = chat['participants'] as List;
+              for (var p in participants) {
+                if (p['_id'] == userId) {
+                  p['isOnline'] = isOnline;
+                  p['lastSeen'] = data['lastSeen'];
+                }
+              }
+            }
+          });
+        }
+      });
+    } else {
+      // Go back to login if no user
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+      );
     }
   }
 
   void _showRetryDialog(String error) {
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true, // Allow dismiss
       builder: (context) => AlertDialog(
-        title: Text('Connection Failed'),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Connection Limited'),
+          ],
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Error: $error'),
-              SizedBox(height: 16),
               Text(
-                'Troubleshooting steps:',
+                'We couldn\'t establish a real-time connection.',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 8),
-              Text('1. Check your internet connection'),
-              Text('2. Ensure backend server is running'),
-              Text('3. Verify Redis is running'),
-              Text('4. Verify MongoDB is running'),
+              Text('Error: $error'),
+              SizedBox(height: 16),
+              Text('You can still view your cached messages while we try to reconnect in the background.'),
             ],
           ),
         ),
@@ -151,16 +182,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
+              setState(() {
+                _isLoading = false; // Allow user to see cached chats
+              });
+            },
+            child: Text('View Offline'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
               _initApp(); // Retry
             },
-            child: Text('Retry'),
+            child: Text('Retry Now'),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               _logout();
             },
-            child: Text('Logout'),
+            child: Text('Logout', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -217,7 +257,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   void _logout() async {
-    SocketService().disconnect();
+    SocketService().reset();
     await _authService.signOut();
     if (!mounted) return;
     Navigator.pushReplacement(
