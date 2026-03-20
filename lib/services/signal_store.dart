@@ -23,7 +23,7 @@ class PersistentSignalStore implements
     final key = '$_sessionPrefix${address.toString()}';
     final data = await _storage.read(key: key);
     if (data != null) {
-      return SessionRecord.fromSerialized(base64Decode(data));
+      return SessionRecord.fromBuffer(base64Decode(data));
     }
     return SessionRecord();
   }
@@ -87,7 +87,7 @@ class PersistentSignalStore implements
     final key = '$_signedPreKeyPrefix$signedPreKeyId';
     final data = await _storage.read(key: key);
     if (data == null) throw InvalidKeyIdException('No signed prekey for ID: $signedPreKeyId');
-    return SignedPreKeyRecord.fromSerialized(base64Decode(data));
+    return SignedPreKeyRecord.fromBuffer(base64Decode(data));
   }
 
   @override
@@ -116,7 +116,7 @@ class PersistentSignalStore implements
   Future<IdentityKeyPair> getIdentityKeyPair() async {
     final data = await _storage.read(key: 'signal_identity_key_pair');
     if (data == null) throw Exception('No Identity Key Pair found');
-    return IdentityKeyPair.fromSerialized(base64Decode(data));
+    return IdentityKeyPair.fromBuffer(base64Decode(data));
   }
 
   @override
