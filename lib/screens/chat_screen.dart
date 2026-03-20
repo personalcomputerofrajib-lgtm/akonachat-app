@@ -137,6 +137,40 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
+      _socket!.on('message_deleted_everyone', (data) {
+        if (mounted && data['chatId'] == widget.chatId) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
+            if (index != -1) {
+              _messages[index]['isDeletedEveryone'] = true;
+              _messages[index]['ciphertext'] = 'This message was deleted';
+              _messages[index]['mediaUrl'] = null;
+              _messages[index]['type'] = 'text';
+            }
+          });
+        }
+      });
+
+      _socket!.on('message_deleted_me', (data) {
+        if (mounted && data['chatId'] == widget.chatId) {
+          setState(() {
+            _messages.removeWhere((m) => m['_id'] == data['msgId']);
+          });
+        }
+      });
+
+      _socket!.on('message_edited', (data) {
+        if (mounted && data['chatId'] == widget.chatId) {
+          setState(() {
+            final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
+            if (index != -1) {
+              _messages[index]['ciphertext'] = data['newText'];
+              _messages[index]['isEdited'] = true;
+            }
+          });
+        }
+      });
+
       _socket!.on('user_typing', (data) {
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() => _isOtherUserTyping = true);
@@ -278,6 +312,82 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _isUploading = false);
     }
   }
+  
+  void _showOptions(Map<String, dynamic> msg, bool isMe) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isMe && !(msg['isDeletedEveryone'] == true))
+            ListTile(
+              leading: Icon(Icons.edit),
+              title: Text('Edit Message'),
+              onTap: () {
+                Navigator.pop(context);
+                _editMessagePrompt(msg);
+              },
+            ),
+          ListTile(
+            leading: Icon(Icons.delete, color: Colors.red),
+            title: Text('Delete for Me'),
+            onTap: () {
+              Navigator.pop(context);
+              _deleteMessage(msg['_id'], false);
+            },
+          ),
+          if (isMe && !(msg['isDeletedEveryone'] == true))
+            ListTile(
+              leading: Icon(Icons.delete_forever, color: Colors.red),
+              title: Text('Delete for Everyone'),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteMessage(msg['_id'], true);
+              },
+            ),
+          SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  void _deleteMessage(String? msgId, bool everyone) {
+    if (msgId == null || _socket == null) return;
+    _socket!.emit('delete_message', {'msgId': msgId, 'everyone': everyone});
+  }
+
+  void _editMessagePrompt(Map<String, dynamic> msg) {
+    final TextEditingController editController = TextEditingController(text: msg['ciphertext']);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Message'),
+        content: TextField(
+          controller: editController,
+          decoration: InputDecoration(hintText: "Enter new message"),
+          maxLines: null,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final newText = editController.text.trim();
+              if (newText.isNotEmpty && newText != msg['ciphertext']) {
+                _editMessage(msg['_id'], newText);
+              }
+              Navigator.pop(context);
+            },
+            child: Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editMessage(String? msgId, String newText) {
+    if (msgId == null || _socket == null) return;
+    _socket!.emit('edit_message', {'msgId': msgId, 'newText': newText});
+  }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -340,6 +450,12 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
+
+                // Filter out "Delete for Me" messages
+                final List? deletedFor = msg['isDeletedFor'];
+                if (deletedFor != null && deletedFor.any((id) => id.toString() == currentUserId)) {
+                  return SizedBox.shrink();
+                }
                 
                 // Extract senderId — can be a populated Map {_id,name,profilePic}
                 // (from receive_message / sync_messages) or a plain String (legacy).
@@ -358,11 +474,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     currentUserId.isNotEmpty &&
                     msgSenderId.toString().toLowerCase().trim() == currentUserId.toString().toLowerCase().trim();
                 
-                return _buildMessageBubble(
-                  msg['ciphertext'] ?? '', 
-                  isMe, 
-                  msg['status'] ?? 'sent',
-                  msg['mediaUrl'],
+                return GestureDetector(
+                  onLongPress: () => _showOptions(msg, isMe),
+                  child: _buildMessageBubble(
+                    msg['isDeletedEveryone'] == true ? 'This message was deleted' : (msg['ciphertext'] ?? ''), 
+                    isMe, 
+                    msg['status'] ?? 'sent',
+                    msg['isDeletedEveryone'] == true ? null : msg['mediaUrl'],
+                    msg['isEdited'] ?? false,
+                  ),
                 );
               },
             ),
@@ -373,8 +493,10 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isMe, String status, [String? mediaUrl]) {
+  Widget _buildMessageBubble(String text, bool isMe, String status, [String? mediaUrl, bool isEdited = false]) {
     if (text.isEmpty && (mediaUrl == null || mediaUrl.isEmpty)) return SizedBox.shrink();
+    
+    final bool isDeleted = text == 'This message was deleted';
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -430,11 +552,22 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Text(
                       text,
                       style: TextStyle(
-                        color: isMe ? Colors.white : Colors.black87,
+                        color: isMe ? Colors.white : (isDeleted ? Colors.grey : Colors.black87),
                         fontSize: 16,
+                        fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
                       ),
                     ),
                   ),
+                  if (isEdited && !isDeleted) ...[
+                    SizedBox(width: 4),
+                    Text(
+                      '(edited)',
+                      style: TextStyle(
+                        color: isMe ? Colors.white70 : Colors.grey,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                   if (isMe) ...[
                     SizedBox(width: 4),
                     Icon(

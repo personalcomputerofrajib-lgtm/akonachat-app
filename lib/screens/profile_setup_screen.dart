@@ -73,11 +73,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
+          final imageUrl = "${data['url']}?t=${DateTime.now().millisecondsSinceEpoch}";
           _user = UserModel(
             id: _user!.id,
             email: _user!.email,
             name: _user!.name,
-            profilePic: data['url'],
+            profilePic: imageUrl,
             username: _user!.username,
             about: _user!.about,
             hasCompletedOnboarding: _user!.hasCompletedOnboarding,

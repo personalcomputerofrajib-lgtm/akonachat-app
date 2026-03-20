@@ -158,6 +158,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         if (updateResp.statusCode == 200) {
           final userData = jsonDecode(updateResp.body);
+          // Force refresh by appending a timestamp to the URL
+          if (userData['profilePic'] != null) {
+            userData['profilePic'] = "${userData['profilePic']}?t=${DateTime.now().millisecondsSinceEpoch}";
+          }
           final updatedUser = UserModel.fromJson(userData);
           await _authService.updateLocalUser(updatedUser);
           

@@ -82,6 +82,32 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
     }
   }
 
+  void _blockUser(String userId) async {
+    setState(() => _isLoading = true);
+    try {
+      final token = await _authService.getToken();
+      final response = await http.post(
+        Uri.parse('${Constants.apiUrl}/users/block'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'userIdToBlock': userId}),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _searchResults.removeWhere((u) => u.id == userId);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('User blocked')));
+      }
+    } catch (e) {
+      print('Block error: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -141,6 +167,10 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           ],
                         ),
                         isThreeLine: user.about != null && user.about!.isNotEmpty,
+                        trailing: IconButton(
+                          icon: Icon(Icons.block, color: Colors.grey),
+                          onPressed: () => _blockUser(user.id),
+                        ),
                         onTap: () => _startChat(user),
                       );
                     },

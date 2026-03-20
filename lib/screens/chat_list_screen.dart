@@ -266,8 +266,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
     String? profilePic,
   }) {
     return InkWell(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ChatScreen(
@@ -276,6 +276,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ),
         );
+        // Refresh when returning from the chat to clear the unread badge
+        _fetchChats();
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
