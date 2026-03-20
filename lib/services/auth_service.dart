@@ -84,6 +84,8 @@ class AuthService {
     await prefs.remove(Constants.userKey);
   }
 
+  Future<void> logout() => signOut();
+
   /// Update local user cache
   Future<void> updateLocalUser(UserModel user) async {
     final prefs = await SharedPreferences.getInstance();

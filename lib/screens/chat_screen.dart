@@ -21,6 +21,7 @@ import 'media_gallery_screen.dart';
 import 'package:dio/dio.dart';
 import 'package:gal/gal.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../widgets/full_screen_image_viewer.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -874,7 +875,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onTap: () {
               if (type == 'image' && mediaUrl != null) {
                 Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => _FullMediaViewer(url: mediaUrl)
+                  builder: (_) => FullScreenImageViewer(imageUrl: mediaUrl)
                 ));
               }
             },
@@ -1106,48 +1107,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-class _FullMediaViewer extends StatelessWidget {
-  final String url;
-  const _FullMediaViewer({Key? key, required this.url}) : super(key: key);
-
-  Future<void> _saveToGallery(BuildContext context) async {
-    final status = await Permission.storage.request();
-    if (status.isGranted || true) { // Gal usually handles its own permissions or needs specific ones
-      try {
-        await Gal.putImageBytes(await http.readBytes(Uri.parse(url)));
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved to Gallery!')));
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(icon: Icon(Icons.download, color: Colors.white), onPressed: () => _saveToGallery(context)),
-        ],
-      ),
-      body: Center(
-        child: Hero(
-          tag: url,
-          child: InteractiveViewer(
-            child: CachedNetworkImage(
-              imageUrl: url,
-              placeholder: (context, url) => CircularProgressIndicator(),
-              errorWidget: (context, url, error) => Icon(Icons.error, color: Colors.white),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _VoicePlayer extends StatefulWidget {
   final String url;
