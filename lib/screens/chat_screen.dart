@@ -995,14 +995,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageBubble(Map<String, dynamic> msg, bool isMe) {
-    final text = msg['isDeletedEveryone'] == true 
+    final rawText = msg['isDeletedEveryone'] == true 
         ? 'This message was deleted' 
         : (msg['ciphertext'] ?? '');
-    final status = msg['status'] ?? 'sent';
-    final mediaUrl = msg['mediaUrl'];
-    final isEdited = msg['isEdited'] ?? false;
-    final reactions = msg['reactions'];
     final type = msg['type'] ?? (mediaUrl != null ? 'image' : 'text');
+    
+    // Decryption status handling
+    final isDecryptionError = rawText == '[[DECRYPTION_ERROR]]';
+    final text = isDecryptionError ? '🔓 Secure decryption failed' : rawText;
     
     if (text.isEmpty && (mediaUrl == null || mediaUrl.isEmpty)) return SizedBox.shrink();
     
@@ -1079,12 +1079,23 @@ class _ChatScreenState extends State<ChatScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
+                            if (!isDeleted && !isDecryptionError)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
+                                child: Icon(Icons.lock, size: 12, color: isMe ? Colors.white70 : Colors.grey),
+                              ),
                             Flexible(
                               child: Text(
                                 text,
                                 style: TextStyle(
-                                  color: isMe ? Colors.white : (isDeleted ? Colors.grey : Colors.black87),
+                                  color: isDecryptionError ? Colors.redAccent : (isMe ? Colors.white : Colors.black),
+                                  fontStyle: isDeleted || isDecryptionError ? FontStyle.italic : FontStyle.normal,
                                   fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                                   fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
                                 ),
                               ),
