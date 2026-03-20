@@ -450,6 +450,7 @@ class _ChatScreenState extends State<ChatScreen> {
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
+                final String currentUserId = _currentUser?.id ?? '';
 
                 // Filter out "Delete for Me" messages
                 final List? deletedFor = msg['isDeletedFor'];
@@ -468,7 +469,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   msgSenderId = senderIdRaw.toString();
                 }
 
-                final String currentUserId = _currentUser?.id ?? '';
                 // Case-insensitive comparison and trim. Handle potential ObjectId type issues.
                 final bool isMe = msgSenderId.isNotEmpty &&
                     currentUserId.isNotEmpty &&
