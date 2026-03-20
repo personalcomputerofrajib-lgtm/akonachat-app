@@ -141,6 +141,9 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
 
+    // Load from local DB immediately (works offline)
+    await _loadLocalMessages();
+
     if (_socket != null) {
       _socket!.emit('join', {'chatId': widget.chatId});
       _socket!.emit('read_chat', {'chatId': widget.chatId});
@@ -148,15 +151,6 @@ class _ChatScreenState extends State<ChatScreen> {
       // Periodically check for key replenishment
       _securityService.checkAndReplenishPreKeys();
       
-      // Load from local secure storage first
-      final localMsgs = await DatabaseService().getMessages(widget.chatId);
-      if (mounted) {
-        setState(() {
-          _messages.clear();
-          _messages.addAll(localMsgs);
-        });
-      }
-
       _socket!.on('receive_message', (data) async {
         if (mounted && data['chatId'] == widget.chatId) {
           String decryptedText = data['ciphertext'] ?? '';
@@ -259,18 +253,19 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('message_status', (data) {
+      _socket!.on('message_status', (data) async {
         if (mounted) {
           setState(() {
             final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
             if (index != -1) {
               _messages[index]['status'] = data['status'];
+              DatabaseService().saveMessage(_messages[index]); // Sync local state
             }
           });
         }
       });
 
-      _socket!.on('message_deleted_everyone', (data) {
+      _socket!.on('message_deleted_everyone', (data) async {
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
@@ -279,6 +274,7 @@ class _ChatScreenState extends State<ChatScreen> {
               _messages[index]['ciphertext'] = 'This message was deleted';
               _messages[index]['mediaUrl'] = null;
               _messages[index]['type'] = 'text';
+              DatabaseService().saveMessage(_messages[index]); // Sync local state
             }
           });
         }
@@ -316,12 +312,13 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('message_reaction_updated', (data) {
+      _socket!.on('message_reaction_updated', (data) async {
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
             if (index != -1) {
               _messages[index]['reactions'] = data['reactions'];
+              DatabaseService().saveMessage(_messages[index]); // Sync local state
             }
           });
         }
@@ -355,6 +352,24 @@ class _ChatScreenState extends State<ChatScreen> {
         _socket!.emit('join', {'chatId': widget.chatId});
         _syncMessages();
       });
+    }
+  }
+
+  Future<void> _loadLocalMessages() async {
+    final localMessages = await DatabaseService().getMessages(widget.chatId);
+    if (localMessages.isNotEmpty && mounted) {
+      setState(() {
+        _messages.clear();
+        _messages.addAll(localMessages);
+        // Populate local paths for media
+        for (var msg in localMessages) {
+          final msgId = msg['_id'] ?? msg['clientMsgId'] ?? '';
+          if (msgId.isNotEmpty && msg['localMediaOrdinal'] != null) {
+            _localMediaPaths[msgId] = msg['localMediaOrdinal'];
+          }
+        }
+      });
+      _scrollToBottom();
     }
   }
 
@@ -406,14 +421,16 @@ class _ChatScreenState extends State<ChatScreen> {
       _socket!.emit('send_message', msgData);
 
       setState(() {
-        _messages.insert(0, {
+        final msg = {
           'chatId': widget.chatId,
           'senderId': {'_id': _currentUser!.id},
           'ciphertext': text, // Keep plaintext for local display
           'clientMsgId': clientMsgId,
           'createdAt': DateTime.now().toIso8601String(),
           'status': 'sent'
-        });
+        };
+        _messages.insert(0, msg);
+        DatabaseService().saveMessage(msg); // Persist locally
         _scrollToBottom();
       });
     } catch (e) {
@@ -442,6 +459,8 @@ class _ChatScreenState extends State<ChatScreen> {
       final path = await _audioRecorder.stop();
       setState(() => _isRecording = false);
       if (path != null) {
+        // Path is already local since it was just recorded
+        _recordingPath = path; 
         await _uploadVoice(File(path));
       }
     } catch (e) {
@@ -504,7 +523,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
 
         setState(() {
-          _messages.insert(0, {
+          final msg = {
             'chatId': widget.chatId,
             'senderId': {'_id': _currentUser!.id},
             'type': 'voice',
@@ -513,7 +532,9 @@ class _ChatScreenState extends State<ChatScreen> {
             'clientMsgId': clientMsgId,
             'createdAt': DateTime.now().toIso8601String(),
             'status': 'sent'
-          });
+          };
+          _messages.insert(0, msg);
+          DatabaseService().saveMessage(msg); // Persist locally
           _scrollToBottom();
         });
       }
@@ -591,7 +612,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
 
         setState(() {
-          _messages.insert(0, {
+          final msg = {
             'chatId': widget.chatId,
             'senderId': {'_id': _currentUser!.id},
             'type': 'image',
@@ -600,7 +621,9 @@ class _ChatScreenState extends State<ChatScreen> {
             'clientMsgId': clientMsgId,
             'createdAt': DateTime.now().toIso8601String(),
             'status': 'sent'
-          });
+          };
+          _messages.insert(0, msg);
+          DatabaseService().saveMessage(msg); // Persist locally
           _scrollToBottom();
         });
       }
@@ -1207,6 +1230,9 @@ class _ChatScreenState extends State<ChatScreen> {
         _downloadProgress.remove(msgId);
         _localMediaPaths[msgId] = decryptedPath;
       });
+
+      // Update local database with the persistent local path
+      await DatabaseService().saveMessage(msg, localMediaPath: decryptedPath);
 
       // Cleanup encrypted temp file
       if (await encFile.exists()) await encFile.delete();

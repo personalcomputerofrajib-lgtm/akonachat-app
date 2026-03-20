@@ -10,6 +10,7 @@ import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'user_search_screen.dart';
 import 'settings_screen.dart';
+import '../services/database_service.dart';
 
 class ChatListScreen extends StatefulWidget {
   @override
@@ -33,6 +34,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
     if (user != null) {
       await SocketService().connect();
       final socket = SocketService().socket;
+      
+      // Load from local DB first
+      await _loadLocalChats();
+      
+      // Then fetch from server
       await _fetchChats();
 
       // Listen for real-time updates
@@ -76,6 +82,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
+    }
+  }
+
+  Future<void> _loadLocalChats() async {
+    final localChats = await DatabaseService().getChats();
+    if (localChats.isNotEmpty && mounted) {
+      setState(() {
+        _chats = localChats;
+        _isLoading = false;
+      });
+    }
+  }
+
   Future<void> _fetchChats() async {
     try {
       final token = await _authService.getToken();
@@ -85,9 +104,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
 
       if (response.statusCode == 200) {
+        final List<dynamic> fetchedChats = jsonDecode(response.body);
         setState(() {
-          _chats = jsonDecode(response.body);
+          _chats = fetchedChats;
         });
+
+        // Save to local database
+        for (var chat in fetchedChats) {
+          await DatabaseService().saveChat(chat);
+        }
       }
     } catch (e) {
       print('Error fetching chats: $e');
