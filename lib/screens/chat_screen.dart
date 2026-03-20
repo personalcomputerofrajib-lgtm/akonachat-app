@@ -18,6 +18,9 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'media_gallery_screen.dart';
+import 'package:dio/dio.dart';
+import 'package:gal/gal.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -44,6 +47,8 @@ class _ChatScreenState extends State<ChatScreen> {
   DateTime? _lastSeen;
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
+  Map<String, double> _downloadProgress = {};
+  Map<String, String?> _localMediaPaths = {};
   
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
@@ -53,6 +58,7 @@ class _ChatScreenState extends State<ChatScreen> {
   
   Color _themeColor = Colors.blueAccent;
   String? _wallpaperUrl;
+  final AudioPlayer _notificationPlayer = AudioPlayer();
 
   bool _isSearching = false;
   String _searchQuery = '';
@@ -155,11 +161,14 @@ class _ChatScreenState extends State<ChatScreen> {
           _scrollToBottom();
         });
         
-        // Mark entire chat as read so our lastReadBy sequence stays current.
-        // This prevents a false unread badge when returning to the chat list.
-        _socket!.emit('read_chat', {'chatId': widget.chatId});
-      }
-    });
+          _socket!.emit('read_chat', {'chatId': widget.chatId});
+          
+          // Play receive sound if it's from the other user
+          if (data['senderId'] != null && data['senderId']['_id'] != _currentUser?.id) {
+            _notificationPlayer.play(AssetSource('sounds/receive.mp3'));
+          }
+        }
+      });
 
       _socket!.on('sync_messages', (data) {
         if (mounted) {
@@ -315,6 +324,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'clientMsgId': clientMsgId,
     };
 
+    _notificationPlayer.play(AssetSource('sounds/send.mp3'));
     _socket!.emit('send_message', msgData);
 
     setState(() {
@@ -377,6 +387,7 @@ class _ChatScreenState extends State<ChatScreen> {
         final voiceUrl = data['url'];
         
         final String clientMsgId = _uuid.v4();
+        _notificationPlayer.play(AssetSource('sounds/send.mp3'));
         _socket!.emit('send_message', {
           'chatId': widget.chatId,
           'type': 'voice',
@@ -447,7 +458,8 @@ class _ChatScreenState extends State<ChatScreen> {
           'clientMsgId': clientMsgId,
         };
 
-        _socket!.emit('send_message', msgData);
+        _notificationPlayer.play(AssetSource('sounds/send.mp3'));
+    _socket!.emit('send_message', msgData);
 
         setState(() {
           _messages.insert(0, {
@@ -839,97 +851,119 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Widget _buildMessageBubble(String text, bool isMe, String status, [String? mediaUrl, bool isEdited = false, List? reactions, String type = 'text']) {
+  Widget _buildMessageBubble(Map<String, dynamic> msg, bool isMe) {
+    final text = msg['ciphertext'] ?? '';
+    final status = msg['status'] ?? 'sent';
+    final mediaUrl = msg['mediaUrl'];
+    final isEdited = msg['isEdited'] ?? false;
+    final reactions = msg['reactions'];
+    final type = msg['type'] ?? (mediaUrl != null ? 'image' : 'text');
+    
     if (text.isEmpty && (mediaUrl == null || mediaUrl.isEmpty)) return SizedBox.shrink();
     
     final bool isDeleted = text == 'This message was deleted';
+    final String msgId = msg['_id'] ?? msg['clientMsgId'] ?? '';
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          Container(
-            margin: EdgeInsets.only(bottom: 4, left: isMe ? 48 : 0, right: isMe ? 0 : 48),
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: isMe ? _themeColor : (Theme.of(context).brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[100]),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-                bottomLeft: Radius.circular(isMe ? 20 : 0),
-                bottomRight: Radius.circular(isMe ? 0 : 20),
+          GestureDetector(
+            onLongPress: () => _showOptions(msg, isMe),
+            onTap: () {
+              if (type == 'image' && mediaUrl != null) {
+                Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => _FullMediaViewer(url: mediaUrl)
+                ));
+              }
+            },
+            child: Container(
+              margin: EdgeInsets.only(bottom: 4, left: isMe ? 48 : 0, right: isMe ? 0 : 48),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isMe ? _themeColor : (Theme.of(context).brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[100]),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  bottomLeft: Radius.circular(isMe ? 20 : 0),
+                  bottomRight: Radius.circular(isMe ? 0 : 20),
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (type == 'voice' && mediaUrl != null)
-                  _VoicePlayer(url: mediaUrl, isMe: isMe)
-                else if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        mediaUrl,
-                        height: 200,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Container(
-                            height: 200,
-                            color: Colors.grey[200],
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        },
-                        errorBuilder: (ctx, err, stack) => Container(
-                          height: 200,
-                          color: Colors.grey[200],
-                          child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-                if (text.isNotEmpty)
-                  Row(
+              child: Stack(
+                children: [
+                   Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Flexible(
-                        child: Text(
-                          text,
-                          style: TextStyle(
-                            color: isMe ? Colors.white : (isDeleted ? Colors.grey : Colors.black87),
-                            fontSize: 16,
-                            fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
-                          ),
-                        ),
-                      ),
-                      if (isEdited && !isDeleted) ...[
-                        SizedBox(width: 4),
-                        Text(
-                          '(edited)',
-                          style: TextStyle(
-                            color: isMe ? Colors.white70 : Colors.grey,
-                            fontSize: 10,
+                      if ((type == 'voice' || type == 'mp3') && mediaUrl != null)
+                        _VoicePlayer(url: mediaUrl, isMe: isMe, isMp3: type == 'mp3')
+                      else if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Hero(
+                              tag: mediaUrl,
+                              child: CachedNetworkImage(
+                                imageUrl: mediaUrl,
+                                height: 200,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(height: 200, color: Colors.grey[200], child: Center(child: CircularProgressIndicator())),
+                                errorWidget: (context, url, error) => Icon(Icons.error),
+                              ),
+                            ),
                           ),
                         ),
                       ],
-                      if (isMe) ...[
-                        SizedBox(width: 4),
-                        Icon(
-                          status == 'read' ? Icons.done_all : Icons.check,
-                          size: 14,
-                          color: status == 'read' ? Colors.blue[200] : Colors.white70,
-                        )
-                      ]
+                      if (text.isNotEmpty && type == 'text')
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                text,
+                                style: TextStyle(
+                                  color: isMe ? Colors.white : (isDeleted ? Colors.grey : Colors.black87),
+                                  fontSize: 16,
+                                  fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
+                                ),
+                              ),
+                            ),
+                            if (isEdited && !isDeleted) ...[
+                              SizedBox(width: 4),
+                              Text('(edited)', style: TextStyle(color: isMe ? Colors.white70 : Colors.grey, fontSize: 10)),
+                            ],
+                            if (isMe) ...[
+                              SizedBox(width: 4),
+                              Icon(
+                                status == 'read' ? Icons.done_all : Icons.check,
+                                size: 14,
+                                color: status == 'read' ? Colors.blue[200] : Colors.white70,
+                              )
+                            ]
+                          ],
+                        ),
                     ],
                   ),
-              ],
+                  if (mediaUrl != null && !_localMediaPaths.containsKey(msgId))
+                    Positioned(
+                      right: 0, bottom: 0,
+                      child: GestureDetector(
+                        onTap: () => _downloadMedia(msgId, mediaUrl),
+                        child: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: Colors.black54,
+                          child: _downloadProgress.containsKey(msgId)
+                            ? CircularProgressIndicator(value: _downloadProgress[msgId], strokeWidth: 2, color: Colors.white)
+                            : Icon(Icons.download, size: 14, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
           if (reactions != null && reactions.isNotEmpty)
@@ -938,7 +972,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Wrap(
                 spacing: 4,
                 runSpacing: 4,
-                children: reactions.map<Widget>((r) {
+                children: (reactions as List).map<Widget>((r) {
                   return Container(
                     padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
@@ -954,6 +988,32 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _downloadMedia(String msgId, String url) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = url.split('/').last;
+      final savePath = '${appDir.path}/$fileName';
+
+      setState(() => _downloadProgress[msgId] = 0);
+      
+      await Dio().download(url, savePath, onReceiveProgress: (count, total) {
+        if (total != -1) {
+          setState(() => _downloadProgress[msgId] = count / total);
+        }
+      });
+
+      setState(() {
+        _downloadProgress.remove(msgId);
+        _localMediaPaths[msgId] = savePath;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Downloaded locally')));
+    } catch (e) {
+      print('Download error: $e');
+      setState(() => _downloadProgress.remove(msgId));
+    }
   }
 
   Widget _buildMessageInput() {
@@ -1046,10 +1106,54 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+class _FullMediaViewer extends StatelessWidget {
+  final String url;
+  const _FullMediaViewer({Key? key, required this.url}) : super(key: key);
+
+  Future<void> _saveToGallery(BuildContext context) async {
+    final status = await Permission.storage.request();
+    if (status.isGranted || true) { // Gal usually handles its own permissions or needs specific ones
+      try {
+        await Gal.putImageBytes(await http.readBytes(Uri.parse(url)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved to Gallery!')));
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(icon: Icon(Icons.download, color: Colors.white), onPressed: () => _saveToGallery(context)),
+        ],
+      ),
+      body: Center(
+        child: Hero(
+          tag: url,
+          child: InteractiveViewer(
+            child: CachedNetworkImage(
+              imageUrl: url,
+              placeholder: (context, url) => CircularProgressIndicator(),
+              errorWidget: (context, url, error) => Icon(Icons.error, color: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _VoicePlayer extends StatefulWidget {
   final String url;
   final bool isMe;
-  const _VoicePlayer({Key? key, required this.url, required this.isMe}) : super(key: key);
+  final bool isMp3;
+  const _VoicePlayer({Key? key, required this.url, required this.isMe, this.isMp3 = false}) : super(key: key);
 
   @override
   _VoicePlayerState createState() => _VoicePlayerState();
@@ -1065,9 +1169,9 @@ class _VoicePlayerState extends State<_VoicePlayer> {
   void initState() {
     super.initState();
     _player = AudioPlayer();
-    _player.onDurationChanged.listen((d) => setState(() => _duration = d));
-    _player.onPositionChanged.listen((p) => setState(() => _position = p));
-    _player.onPlayerComplete.listen((_) => setState(() => _isPlaying = false));
+    _player.onDurationChanged.listen((d) { if(mounted) setState(() => _duration = d); });
+    _player.onPositionChanged.listen((p) { if(mounted) setState(() => _position = p); });
+    _player.onPlayerComplete.listen((_) { if(mounted) setState(() => _isPlaying = false); });
   }
 
   @override
@@ -1082,26 +1186,43 @@ class _VoicePlayerState extends State<_VoicePlayer> {
     } else {
       await _player.play(UrlSource(widget.url));
     }
-    setState(() => _isPlaying = !_isPlaying);
+    if(mounted) setState(() => _isPlaying = !_isPlaying);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: widget.isMe ? Colors.white : Colors.blueAccent),
-          onPressed: _togglePlay,
-          padding: EdgeInsets.zero,
-          constraints: BoxConstraints(),
-        ),
-        SizedBox(width: 8),
-        Text(
-          "${_position.inMinutes}:${(_position.inSeconds % 60).toString().padLeft(2, '0')} / ${_duration.inMinutes}:${(_duration.inSeconds % 60).toString().padLeft(2, '0')}",
-          style: TextStyle(color: widget.isMe ? Colors.white70 : Colors.black54, fontSize: 12),
-        ),
-      ],
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: widget.isMe ? Colors.white24 : Colors.blueAccent.withOpacity(0.1),
+            child: IconButton(
+              icon: Icon(
+                widget.isMp3 ? (_isPlaying ? Icons.pause : Icons.music_note) : (_isPlaying ? Icons.pause : Icons.play_arrow),
+                color: widget.isMe ? Colors.white : Colors.blueAccent,
+                size: 20,
+              ),
+              onPressed: _togglePlay,
+              padding: EdgeInsets.zero,
+            ),
+          ),
+          SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.isMp3)
+                Text('MP3 Audio', style: TextStyle(color: widget.isMe ? Colors.white : Colors.black87, fontSize: 13, fontWeight: FontWeight.bold)),
+              Text(
+                "${_position.inMinutes}:${(_position.inSeconds % 60).toString().padLeft(2, '0')} / ${_duration.inMinutes}:${(_duration.inSeconds % 60).toString().padLeft(2, '0')}",
+                style: TextStyle(color: widget.isMe ? Colors.white70 : Colors.black54, fontSize: 11),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
