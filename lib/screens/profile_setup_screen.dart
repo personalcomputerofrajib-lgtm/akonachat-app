@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:io';
@@ -167,7 +168,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         radius: 50,
                         backgroundColor: Colors.blueAccent.withOpacity(0.1),
                         backgroundImage: _user?.profilePic != null && _user!.profilePic.isNotEmpty 
-                          ? NetworkImage(_user!.profilePic) 
+                          ? CachedNetworkImageProvider(_user!.profilePic) 
                           : null,
                         child: _user?.profilePic == null || _user!.profilePic.isEmpty 
                           ? Icon(Icons.person, size: 50, color: Colors.blueAccent) 

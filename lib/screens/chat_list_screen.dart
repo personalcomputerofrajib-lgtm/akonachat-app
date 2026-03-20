@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/constants.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
 import '../models/user_model.dart';
@@ -145,7 +146,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 tag: 'profilePic',
                 child: CircleAvatar(
                   backgroundImage: _currentUser?.profilePic != null && _currentUser!.profilePic.isNotEmpty
-                      ? NetworkImage(_currentUser!.profilePic)
+                      ? CachedNetworkImageProvider(_currentUser!.profilePic)
                       : null,
                   backgroundColor: Colors.white,
                   child: (_currentUser?.profilePic == null || _currentUser!.profilePic.isEmpty)
@@ -322,7 +323,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                  backgroundImage: profilePic != null && profilePic.isNotEmpty ? NetworkImage(profilePic) : null,
+                    backgroundImage: profilePic != null && profilePic.isNotEmpty ? CachedNetworkImageProvider(profilePic) : null,
                   child: profilePic == null || profilePic.isEmpty 
                     ? Text(name[0], style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 20))
                     : null,

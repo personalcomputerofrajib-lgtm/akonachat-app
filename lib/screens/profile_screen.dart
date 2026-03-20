@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -220,7 +221,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 CircleAvatar(
                   radius: 60,
                   backgroundImage: _user?.profilePic != null && _user!.profilePic.isNotEmpty
-                      ? NetworkImage(_user!.profilePic)
+                      ? CachedNetworkImageProvider(_user!.profilePic)
                       : null,
                   backgroundColor: Colors.grey[200],
                   child: (_user?.profilePic == null || _user!.profilePic.isEmpty)

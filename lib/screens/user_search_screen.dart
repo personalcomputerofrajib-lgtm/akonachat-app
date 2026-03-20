@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/constants.dart';
@@ -148,7 +149,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                       final user = _searchResults[index];
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: user.profilePic.isNotEmpty ? NetworkImage(user.profilePic) : null,
+                          backgroundImage: user.profilePic.isNotEmpty ? CachedNetworkImageProvider(user.profilePic) : null,
                           backgroundColor: Colors.blueAccent.withOpacity(0.1),
                           child: user.profilePic.isEmpty ? Icon(Icons.person, color: Colors.blueAccent) : null,
                         ),
