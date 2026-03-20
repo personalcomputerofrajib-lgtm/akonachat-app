@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../widgets/full_screen_image_viewer.dart';
 
 class UserDetailScreen extends StatelessWidget {
   final UserModel user;
@@ -99,33 +100,3 @@ class UserDetailScreen extends StatelessWidget {
   }
 }
 
-class FullScreenImageViewer extends StatelessWidget {
-  final String imageUrl;
-
-  const FullScreenImageViewer({Key? key, required this.imageUrl}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: IconThemeData(color: Colors.white),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          panEnabled: true,
-          boundaryMargin: EdgeInsets.all(20),
-          minScale: 0.5,
-          maxScale: 4,
-          child: CachedNetworkImage(
-            imageUrl: imageUrl,
-            placeholder: (context, url) => CircularProgressIndicator(color: Colors.white),
-            errorWidget: (context, url, error) => Icon(Icons.error, color: Colors.white),
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
-    );
-  }
-}

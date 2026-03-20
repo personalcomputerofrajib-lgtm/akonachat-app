@@ -16,7 +16,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import 'media_gallery_screen.dart';
 import 'package:dio/dio.dart';
 import 'package:gal/gal.dart';
@@ -25,6 +24,7 @@ import '../services/session_service.dart';
 import '../services/encryption_service.dart';
 import '../services/security_service.dart';
 import '../services/database_service.dart';
+import '../widgets/full_screen_image_viewer.dart';
 // Remove redundant import to fix conflict with user_detail_screen.dart
 
 class ChatScreen extends StatefulWidget {
@@ -998,6 +998,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final rawText = msg['isDeletedEveryone'] == true 
         ? 'This message was deleted' 
         : (msg['ciphertext'] ?? '');
+    final String? mediaUrl = msg['mediaUrl'];
+    final bool isEdited = msg['isEdited'] ?? false;
+    final String status = msg['status'] ?? 'sent';
+    final dynamic reactions = msg['reactions'];
+
     final type = msg['type'] ?? (mediaUrl != null ? 'image' : 'text');
     
     // Decryption status handling
@@ -1110,8 +1115,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             ]
                           ],
                         ),
-                    ],
-                  ),
                   if (mediaUrl != null && !_localMediaPaths.containsKey(msgId))
                     Positioned(
                       right: 0, bottom: 0,
