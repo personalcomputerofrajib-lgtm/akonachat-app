@@ -1096,10 +1096,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ],
                         ),
-                                  fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
-                                ),
-                              ),
-                            ),
                             if (isEdited && !isDeleted) ...[
                               SizedBox(width: 4),
                               Text('(edited)', style: TextStyle(color: isMe ? Colors.white70 : Colors.grey, fontSize: 10)),
