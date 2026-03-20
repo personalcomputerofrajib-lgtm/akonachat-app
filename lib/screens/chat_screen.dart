@@ -155,8 +155,6 @@ class _ChatScreenState extends State<ChatScreen> {
           _messages.addAll(localMsgs);
         });
       }
-      
-      _syncMessages();
 
       _socket!.on('receive_message', (data) async {
         if (mounted && data['chatId'] == widget.chatId) {
@@ -214,15 +212,43 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('sync_messages', (data) {
+      _socket!.on('sync_messages', (data) async {
         if (mounted) {
           final List newlySynced = data as List;
-          setState(() {
-            for (var msg in newlySynced) {
-              if (!_messages.any((m) => m['_id'] == msg['_id'])) {
-                _messages.insert(0, msg);
+          
+          for (var msg in newlySynced) {
+            String decryptedText = msg['ciphertext'] ?? '';
+            
+            // Decrypt if it's an encrypted message from the other user
+            if (msg['senderId'] != null && 
+                msg['senderId']['_id'] != _currentUser?.id && 
+                msg['signalType'] != null) {
+              try {
+                decryptedText = await _sessionService.decryptMessage(
+                  msg['senderId']['_id'], 
+                  {
+                    'body': msg['ciphertext'],
+                    'type': msg['signalType']
+                  }
+                );
+              } catch (e) {
+                print('Sync Decryption Error: $e');
+                decryptedText = '[Encrypted Message]';
               }
             }
+            
+            msg['ciphertext'] = decryptedText;
+
+            if (!_messages.any((m) => m['_id'] == msg['_id'])) {
+              setState(() {
+                _messages.insert(0, msg);
+              });
+              // Persist locally
+              await DatabaseService().saveMessage(msg);
+            }
+          }
+
+          setState(() {
             _messages.sort((a, b) {
               final aSeq = a['sequence'] ?? 0;
               final bSeq = b['sequence'] ?? 0;
