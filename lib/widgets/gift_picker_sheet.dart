@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class GiftPickerSheet extends StatefulWidget {
   final String recipientId;
@@ -25,6 +26,10 @@ class _GiftPickerSheetState extends State<GiftPickerSheet> {
     {'id': 'cake', 'name': 'Cake', 'price': 25, 'icon': Icons.cake, 'color': Colors.pinkAccent},
     {'id': 'friendship_band', 'name': 'Friend Band', 'price': 50, 'icon': Icons.watch, 'color': Colors.purpleAccent},
     {'id': 'car', 'name': 'Sports Car', 'price': 500, 'icon': Icons.directions_car, 'color': Colors.blueAccent},
+    {'id': 'gift_medal', 'name': 'Gold Medal', 'price': 200, 'isStatic': true, 'color': Colors.orangeAccent},
+    {'id': 'gift_diamond', 'name': 'Diamond', 'price': 500, 'isStatic': true, 'color': Colors.cyanAccent},
+    {'id': 'gift_watch', 'name': 'Luxury Watch', 'price': 1000, 'isStatic': true, 'color': Colors.amberAccent},
+    {'id': 'gift_jet', 'name': 'Private Jet', 'price': 2000, 'isStatic': true, 'color': Colors.blueGrey},
   ];
 
   void _sendGift(String itemId, int price) async {
@@ -113,14 +118,29 @@ class _GiftPickerSheetState extends State<GiftPickerSheet> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(gift['icon'], color: gift['color'], size: 36),
+                        if (gift['isStatic'] == true)
+                          CachedNetworkImage(
+                            imageUrl: 'http://52.66.216.152:9000/static/${gift['id']}.png',
+                            height: 40,
+                            width: 40,
+                            placeholder: (context, url) => Icon(Icons.card_giftcard, color: gift['color'], size: 36),
+                            errorWidget: (context, url, error) => Icon(Icons.error, color: Colors.red, size: 36),
+                          )
+                        else
+                          Icon(gift['icon'], color: gift['color'], size: 36),
                         const SizedBox(height: 8),
                         Text(gift['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
                         const SizedBox(height: 4),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.monetization_on, size: 14, color: Colors.orangeAccent),
+                            CachedNetworkImage(
+                              imageUrl: 'http://52.66.216.152:9000/static/coin.png',
+                              height: 14,
+                              width: 14,
+                              placeholder: (context, url) => const Icon(Icons.monetization_on, size: 14, color: Colors.orangeAccent),
+                              errorWidget: (context, url, error) => const Icon(Icons.monetization_on, size: 14, color: Colors.orangeAccent),
+                            ),
                             const SizedBox(width: 4),
                             Text('${gift['price']}', style: const TextStyle(color: Colors.orangeAccent, fontSize: 12)),
                           ],

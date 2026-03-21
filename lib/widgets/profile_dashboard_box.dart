@@ -134,20 +134,26 @@ class ProfileDashboardBox extends StatelessWidget {
 
   Widget _buildCoinDisplay() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.yellowAccent.withOpacity(0.1),
+        color: Colors.yellowAccent.withOpacity(0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.yellowAccent.withOpacity(0.3), width: 1),
+        border: Border.all(color: Colors.yellowAccent.withOpacity(0.2), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.monetization_on, color: Colors.yellowAccent, size: 20),
-          const SizedBox(width: 4),
+          CachedNetworkImage(
+            imageUrl: 'http://52.66.216.152:9000/static/coin.png',
+            height: 20,
+            width: 20,
+            placeholder: (context, url) => const Icon(Icons.monetization_on, color: Colors.yellowAccent, size: 18),
+            errorWidget: (context, url, error) => const Icon(Icons.monetization_on, color: Colors.yellowAccent, size: 18),
+          ),
+          const SizedBox(width: 6),
           Text(
             '${user.coins}',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ],
       ),
@@ -180,6 +186,30 @@ class ProfileDashboardBox extends StatelessWidget {
   }
 
   Widget _getGiftIcon(String? itemId) {
+    if (itemId == null) return const Icon(Icons.card_giftcard, color: Colors.white);
+
+    // Try to load from static server for NEW gifts
+    if (itemId.startsWith('gift_')) {
+      return Tooltip(
+        message: itemId.replaceAll('gift_', '').replaceAll('_', ' ').toUpperCase(),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: CachedNetworkImage(
+            imageUrl: 'http://52.66.216.152:9000/static/$itemId.png',
+            height: 32,
+            width: 32,
+            placeholder: (context, url) => const Icon(Icons.card_giftcard, color: Colors.white, size: 20),
+            errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.red, size: 20),
+          ),
+        ),
+      );
+    }
+
+    // OLD LEGACY GIFTS (Material Icons)
     IconData icon;
     Color color;
     switch (itemId) {
@@ -204,7 +234,7 @@ class ProfileDashboardBox extends StatelessWidget {
         color = Colors.white;
     }
     return Tooltip(
-      message: itemId ?? 'Gift',
+      message: itemId,
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
