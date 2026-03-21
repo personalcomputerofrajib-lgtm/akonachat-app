@@ -6,7 +6,7 @@ class Constants {
   
   // Google Web Client ID (for requesting the ID token for backend)
   static const String webClientId = 
-      '196123415057-tengfcv2ude47c7je9vv101r2pnqju0m.apps.googleusercontent.com';
+      '196123415057-liqimnfp9t2l819o8lcuaqdbne1rrkn9.apps.googleusercontent.com';
   
   // Storage keys
   static const String tokenKey = 'auth_token';
