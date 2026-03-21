@@ -36,7 +36,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   }
 
   void _loadUser() async {
-    final user = await _authService.getUser();
+    final user = await _authService.loadUser();
     setState(() => _user = user);
     if (user != null) {
       _nameController.text = user.name;

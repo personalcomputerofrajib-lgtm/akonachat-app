@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/cache_manager.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
