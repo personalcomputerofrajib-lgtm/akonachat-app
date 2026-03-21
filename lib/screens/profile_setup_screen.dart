@@ -19,6 +19,7 @@ class ProfileSetupScreen extends StatefulWidget {
   _ProfileSetupScreenState createState() => _ProfileSetupScreenState();
 }
 
+class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _nameController = TextEditingController();
   final _aboutController = TextEditingController();
   final _authService = AuthService();
