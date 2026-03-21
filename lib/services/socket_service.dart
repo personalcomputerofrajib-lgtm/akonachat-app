@@ -9,6 +9,8 @@ class SocketService {
   factory SocketService() => _instance;
   SocketService._internal();
 
+  IO.Socket? _socket;
+  bool _isConnected = false;
   String? _connectionError;
   bool _timeoutOccurred = false;
 

@@ -546,7 +546,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        _sendVoiceMessage(data['url']);
+        final String voiceUrl = data['url'];
+        _sendVoiceMessage(voiceUrl);
         
         // Issue #119/120: Cleanup temporary recording file
         if (_recordingPath != null) {
@@ -556,7 +557,6 @@ class _ChatScreenState extends State<ChatScreen> {
             print('✅ Temporary recording deleted: $_recordingPath');
           }
         }
-      }
   
         // 3. Prepare Media Metadata (Key, Nonce, Mac)
         final mediaMetadata = {

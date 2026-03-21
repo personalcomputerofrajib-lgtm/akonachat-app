@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/cache_manager.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
