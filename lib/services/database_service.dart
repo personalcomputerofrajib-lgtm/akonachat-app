@@ -181,4 +181,16 @@ class DatabaseService {
     final db = await database;
     await db.update('chats', {'unreadCount': unreadCount}, where: 'id = ?', whereArgs: [chatId]);
   }
+
+  Future<Map<String, dynamic>?> getChat(String chatId) async {
+    final db = await database;
+    final results = await db.query('chats', where: 'id = ?', whereArgs: [chatId]);
+    if (results.isEmpty) return null;
+    
+    final chat = Map<String, dynamic>.from(results.first);
+    if (chat['participants'] != null) {
+      chat['participants'] = jsonDecode(chat['participants']);
+    }
+    return chat;
+  }
 }

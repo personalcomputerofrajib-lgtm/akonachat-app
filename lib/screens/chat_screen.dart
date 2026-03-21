@@ -24,6 +24,7 @@ import '../services/session_service.dart';
 import '../services/encryption_service.dart';
 import '../services/security_service.dart';
 import '../services/database_service.dart';
+import '../services/socket_service.dart';
 import '../widgets/full_screen_image_viewer.dart';
 // Remove redundant import to fix conflict with user_detail_screen.dart
 
@@ -49,6 +50,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isMeTyping = false;
   DateTime? _lastTypingTime;
   bool? _isOtherUserOnline;
+  bool _isOtherUserTyping = false;
   DateTime? _lastSeen;
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
@@ -547,65 +549,72 @@ class _ChatScreenState extends State<ChatScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final String voiceUrl = data['url'];
-        _sendVoiceMessage(voiceUrl);
-        
-        // Issue #119/120: Cleanup temporary recording file
-        if (_recordingPath != null) {
-          final file = File(_recordingPath!);
-          if (await file.exists()) {
-            await file.delete();
-            print('✅ Temporary recording deleted: $_recordingPath');
-          }
-        }
-  
-        // 3. Prepare Media Metadata (Key, Nonce, Mac)
+        // 3. Prepare Media Metadata
         final mediaMetadata = {
           'key': encryptedData['key'],
           'nonce': encryptedData['nonce'],
           'mac': encryptedData['mac'],
         };
-
-        // 4. Encrypt Metadata via Signal Protocol
-        final encryptedMeta = await _sessionService.encryptMessage(
-          _otherUser!.id, 
-          jsonEncode(mediaMetadata)
-        );
         
-        final String clientMsgId = _uuid.v4();
-        _notificationPlayer.play(AssetSource('sounds/send.mp3'));
-
-        _socket!.emit('send_message', {
-          'chatId': widget.chatId,
-          'type': 'voice',
-          'mediaUrl': voiceUrl,
-          'ciphertext': encryptedMeta['body'],
-          'signalType': encryptedMeta['type'],
-          'clientMsgId': clientMsgId,
-        });
-
-        final msg = {
-          'chatId': widget.chatId,
-          'senderId': {'_id': _currentUser!.id},
-          'type': 'voice',
-          'mediaUrl': voiceUrl,
-          'ciphertext': '[Voice Message]', // Local display
-          'clientMsgId': clientMsgId,
-          'createdAt': DateTime.now().toIso8601String(),
-          'status': 'sent'
-        };
-
-        setState(() {
-          _messages.insert(0, msg);
-          _scrollToBottom();
-        });
-
-        // Persist locally - OUTSIDE setState
-        await DatabaseService().saveMessage(msg);
+        _sendVoiceMessage(voiceUrl, mediaMetadata);
+        
+        // Cleanup temporary recording file
+        if (_recordingPath != null) {
+          final file = File(_recordingPath!);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        }
       }
     } catch (e) {
       print('Encrypted Voice upload error: $e');
     } finally {
       setState(() => _isUploading = false);
+    }
+  }
+
+  void _sendVoiceMessage(String voiceUrl, Map<String, String?> mediaMetadata) async {
+    if (_socket == null || _currentUser == null || _otherUser == null) return;
+    
+    try {
+      final encryptedMeta = await _sessionService.encryptMessage(
+        _otherUser!.id, 
+        jsonEncode(mediaMetadata)
+      );
+      
+      final String clientMsgId = _uuid.v4();
+      _notificationPlayer.play(AssetSource('sounds/send.mp3'));
+
+      final msgData = {
+        'chatId': widget.chatId,
+        'type': 'voice',
+        'mediaUrl': voiceUrl,
+        'ciphertext': encryptedMeta['body'],
+        'signalType': encryptedMeta['type'],
+        'clientMsgId': clientMsgId,
+      };
+
+      _socket!.emit('send_message', msgData);
+
+      final msg = {
+        'chatId': widget.chatId,
+        'senderId': {'_id': _currentUser!.id},
+        'type': 'voice',
+        'mediaUrl': voiceUrl,
+        'ciphertext': '[Voice Message]',
+        'clientMsgId': clientMsgId,
+        'createdAt': DateTime.now().toIso8601String(),
+        'status': 'sent'
+      };
+
+      setState(() {
+        _messages.insert(0, msg);
+        _scrollToBottom();
+      });
+
+      await DatabaseService().saveMessage(msg);
+    } catch (e) {
+      print('Send voice logic error: $e');
     }
   }
 
