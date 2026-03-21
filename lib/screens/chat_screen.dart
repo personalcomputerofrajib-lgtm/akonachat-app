@@ -1199,15 +1199,14 @@ class _ChatScreenState extends State<ChatScreen> {
     
     final bool isDeleted = text == 'This message was deleted';
     final String msgId = msg['_id'] ?? msg['clientMsgId'] ?? '';
+    final bool isCyber = Provider.of<ThemeService>(context).isCyberMode;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          final bool isCyber = Provider.of<ThemeService>(context).isCyberMode;
-          
-          return GestureDetector(
+          GestureDetector(
             onLongPress: () => _showOptions(msg, isMe),
             onTap: () {
               if (type == 'image' && mediaUrl != null) {
@@ -1284,17 +1283,18 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                              SizedBox(width: 4),
+                            if (isMe) ...[
+                              const SizedBox(width: 4),
                               Icon(
                                 status == 'read' ? Icons.done_all : Icons.check,
                                 size: 14,
                                 color: status == 'read' ? Colors.blue[200] : Colors.white70,
-                              )
-                            ]
+                              ),
+                            ],
                           ],
                         ),
+                    ],
+                  ),
                   if (mediaUrl != null && !_localMediaPaths.containsKey(msgId))
                     Positioned(
                       right: 0, bottom: 0,

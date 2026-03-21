@@ -143,8 +143,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return UsernameSetupScreen();
     }
 
-import 'screens/main_tabs_screen.dart';
-...
     return MainTabsScreen();
   }
 }

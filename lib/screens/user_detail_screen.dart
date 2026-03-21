@@ -73,7 +73,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   Future<void> _fetchUserMoments() async {
     try {
       final token = await _authService.getToken();
-      final targetId = widget.userId ?? (await _authService.getCurrentUser())?.id;
+      final targetId = widget.userId ?? (await _authService.loadUser())?.id;
       if (targetId == null) {
         if (mounted) setState(() => _isLoadingMoments = false);
         return;
@@ -253,30 +253,29 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 ),
               ),
               const Spacer(),
-              _buildInteractionStat('Moments', _moments.length, isCyber), // Placeholder for moments logic
+              _buildInteractionStat('Moments', _moments.length, isCyber),
             ],
           ),
           const SizedBox(height: 16),
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(user.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            _buildLevelBadge(isCyber),
-            const SizedBox(width: 8),
-            Text('ID:${user.gameId ?? user.id.substring(0, 8)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
-            IconButton(icon: const Icon(Icons.copy, size: 14, color: Colors.grey), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.only(left: 4)),
-          ],
-        ),
-      ],
+          Text(user.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              _buildLevelBadge(isCyber),
+              const SizedBox(width: 8),
+              Text('ID:${user.gameId ?? user.id.substring(0, 8)}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              IconButton(icon: const Icon(Icons.copy, size: 14, color: Colors.grey), onPressed: () {}, constraints: const BoxConstraints(), padding: const EdgeInsets.only(left: 4)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildInteractionStat(String label, int count) {
+  Widget _buildInteractionStat(String label, int count, bool isCyber) {
     return Column(
       children: [
-        Text(count.toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(count.toString(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isCyber ? Colors.white : Colors.black87)),
         Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
       ],
     );
@@ -411,11 +410,11 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     );
   }
 
-  Widget _buildBottomActions(BuildContext context) {
+  Widget _buildBottomActions(BuildContext context, bool isCyber) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isCyber ? Colors.black : Colors.white,
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
       ),
       child: Row(

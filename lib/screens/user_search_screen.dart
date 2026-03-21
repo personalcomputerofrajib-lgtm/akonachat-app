@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 import 'chat_screen.dart';
+import 'user_detail_screen.dart';
 
 class UserSearchScreen extends StatefulWidget {
   @override

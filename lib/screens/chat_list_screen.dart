@@ -1,4 +1,3 @@
-```dart
 import 'package:flutter/material.dart';
 import '../services/cache_manager.dart';
 import 'dart:async';
@@ -20,7 +19,7 @@ import 'settings_screen.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
 import 'package:http/http.dart' as http;
-import '../utils/constants.dart';
+import '../config/constants.dart';
 
 class ChatListScreen extends StatefulWidget {
   @override
@@ -647,5 +646,58 @@ class _ChatListScreenState extends State<ChatListScreen> {
     if (difference.inHours < 24) return '${difference.inHours}h';
     if (difference.inDays < 7) return '${difference.inDays}d';
     return '${time.day}/${time.month}';
+  Future<void> _loadLocalChats() async {
+    try {
+      final localChats = await DatabaseService().getChats();
+      if (mounted) {
+        setState(() {
+          _chats = localChats;
+          if (_chats.isNotEmpty) _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading local chats: $e');
+    }
+  }
+
+  Future<void> _loadChats() async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('${Constants.apiUrl}/chats'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final List<dynamic> remoteChats = jsonDecode(response.body);
+        
+        // Update local DB
+        for (var chat in remoteChats) {
+          await DatabaseService().saveChat(chat);
+        }
+
+        if (mounted) {
+          setState(() {
+            _chats = remoteChats;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading remote chats: $e');
+    }
+  }
+
+  Future<void> _logout() async {
+    await _authService.logout();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+        (route) => false,
+      );
+    }
   }
 }

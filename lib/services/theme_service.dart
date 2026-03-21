@@ -50,7 +50,7 @@ class ThemeService with ChangeNotifier {
             foregroundColor: Color(0xFF00E5FF),
             elevation: 8,
           ),
-          cardTheme: CardTheme(
+          cardTheme: CardThemeData(
             color: const Color(0xFF1D1E33).withOpacity(0.8),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
