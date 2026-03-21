@@ -104,4 +104,52 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(Constants.userKey, jsonEncode(user.toJson()));
   }
+
+  /// Claim daily login reward
+  Future<Map<String, dynamic>?> claimDailyReward() async {
+    try {
+      final response = await _apiService.post('/engagement/claim-daily');
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final currentUser = await loadUser();
+        if (currentUser != null) {
+          final updatedUser = UserModel.fromJson({
+            ...currentUser.toJson(),
+            'coins': data['coins'],
+            'streak': data['streak'],
+          });
+          await updateLocalUser(updatedUser);
+        }
+        return data;
+      }
+    } catch (e) {
+      print('Error claiming daily reward: $e');
+    }
+    return null;
+  }
+
+  /// Send a sticker gift to someone
+  Future<Map<String, dynamic>?> sendGift(String recipientId, String itemId) async {
+    try {
+      final response = await _apiService.post(
+        '/engagement/send-gift',
+        body: {'recipientId': recipientId, 'itemId': itemId},
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final currentUser = await loadUser();
+        if (currentUser != null) {
+          final updatedUser = UserModel.fromJson({
+            ...currentUser.toJson(),
+            'coins': data['coins'],
+          });
+          await updateLocalUser(updatedUser);
+        }
+        return data;
+      }
+    } catch (e) {
+      print('Error sending gift: $e');
+    }
+    return null;
+  }
 }

@@ -8,6 +8,10 @@ class UserModel {
   final bool hasCompletedOnboarding;
   final bool? isOnline;
   final DateTime? lastSeen;
+  final int coins;
+  final int streak;
+  final List<dynamic>? gifts;
+  final String? profileBanner;
 
   UserModel({
     required this.id,
@@ -19,6 +23,10 @@ class UserModel {
     this.hasCompletedOnboarding = false,
     this.isOnline,
     this.lastSeen,
+    this.coins = 0,
+    this.streak = 0,
+    this.gifts,
+    this.profileBanner,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -37,6 +45,10 @@ class UserModel {
       hasCompletedOnboarding: json['hasCompletedOnboarding'] == true,
       isOnline: json['isOnline'] == true,
       lastSeen: json['lastSeen'] != null ? DateTime.tryParse(json['lastSeen'].toString()) : null,
+      coins: json['coins'] ?? 0,
+      streak: json['streak'] ?? 0,
+      gifts: json['gifts'] ?? [],
+      profileBanner: json['profileBanner']?.toString(),
     );
   }
 
@@ -51,6 +63,10 @@ class UserModel {
       'hasCompletedOnboarding': hasCompletedOnboarding,
       'isOnline': isOnline,
       'lastSeen': lastSeen?.toIso8601String(),
+      'coins': coins,
+      'streak': streak,
+      'gifts': gifts,
+      'profileBanner': profileBanner,
     };
   }
 }

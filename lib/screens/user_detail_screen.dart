@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/full_screen_image_viewer.dart';
+import '../widgets/profile_dashboard_box.dart';
+import '../widgets/gift_picker_sheet.dart';
 
 class UserDetailScreen extends StatelessWidget {
   final UserModel user;
@@ -46,6 +48,38 @@ class UserDetailScreen extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 10),
+            
+            // --- NEW DASHBOARD SECTION ---
+            ProfileDashboardBox(user: user),
+            
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (context) => GiftPickerSheet(
+                      recipientId: user.id,
+                      recipientName: user.name,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.card_giftcard),
+                label: const Text('Send a Social Gift'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 10),
             SizedBox(height: 20),
             Text(
               user.name,

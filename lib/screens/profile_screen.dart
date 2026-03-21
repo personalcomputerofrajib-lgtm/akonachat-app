@@ -7,6 +7,7 @@ import 'dart:io';
 import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import '../widgets/profile_dashboard_box.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -41,6 +42,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       _isLoading = false;
     });
+  }
+
+  Future<void> _updateBanner(String bannerUrl) async {
+    setState(() => _isSaving = true);
+    try {
+      final token = await _authService.getToken();
+      final response = await http.patch(
+        Uri.parse('${Constants.apiUrl}/users/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({'profileBanner': bannerUrl}),
+      );
+
+      if (response.statusCode == 200) {
+        final updatedUser = UserModel.fromJson(jsonDecode(response.body));
+        await _authService.updateLocalUser(updatedUser);
+        setState(() => _user = updatedUser);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Profile banner updated!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating banner: $e')));
+    } finally {
+      setState(() => _isSaving = false);
+    }
   }
 
   Future<void> _updateProfile() async {
@@ -213,9 +242,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(24),
         child: Column(
           children: [
+            if (_user != null) ProfileDashboardBox(user: _user!, isCurrentUser: true),
+            const SizedBox(height: 8),
             Stack(
               children: [
                 CircleAvatar(
@@ -275,11 +305,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             SizedBox(height: 32),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Choose Your Gaming Banner',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildBannerOption('PUBG', 'http://52.66.216.152:9000/static/pubg_banner.jpg'),
+                  _buildBannerOption('BGMI', 'http://52.66.216.152:9000/static/bgmi_banner.jpg'),
+                  _buildBannerOption('Free Fire', 'http://52.66.216.152:9000/static/free_fire_banner.jpg'),
+                  _buildBannerOption('COD', 'http://52.66.216.152:9000/static/call_of_duty.jpg'),
+                ],
+              ),
+            ),
+            SizedBox(height: 32),
             Text(
               'Email: ${_user?.email ?? ""}',
               style: TextStyle(color: Colors.grey[600]),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBannerOption(String label, String url) {
+    bool isSelected = _user?.profileBanner == url;
+    return GestureDetector(
+      onTap: () => _updateBanner(url),
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? Colors.blueAccent : Colors.grey[300]!,
+            width: isSelected ? 3 : 1,
+          ),
+          image: DecorationImage(
+            image: CachedNetworkImageProvider(url),
+            fit: BoxFit.cover,
+            colorFilter: isSelected ? null : ColorFilter.mode(Colors.black.withOpacity(0.3), BlendMode.darken),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              shadows: [Shadow(color: Colors.black, blurRadius: 4)],
+            ),
+          ),
         ),
       ),
     );

@@ -93,6 +93,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
         await DatabaseService().database.timeout(const Duration(seconds: 15), onTimeout: () {
           throw TimeoutException('Database initialization timed out.');
         });
+
+        // --- NEW: PHASE 2 ENGAGEMENT ---
+        // Claim daily reward in background
+        _authService.claimDailyReward().then((rewardData) {
+          if (rewardData != null && mounted) {
+            final int reward = rewardData['reward'];
+            final int streak = rewardData['streak'];
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('🔥 $streak Day Streak! Claimed $reward Daily Coins!'),
+                backgroundColor: Colors.orangeAccent,
+                duration: const Duration(seconds: 4),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        });
       }
 
       if (mounted) {
