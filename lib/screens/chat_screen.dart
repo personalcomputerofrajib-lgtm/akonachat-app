@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/socket_service.dart';
+import '../services/message_queue.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
@@ -45,7 +45,7 @@ class _ChatScreenState extends State<ChatScreen> {
   UserModel? _currentUser;
   final Uuid _uuid = Uuid();
 
-  bool _isOtherUserTyping = false;
+  final ValueNotifier<bool> _isOtherUserTypingNotifier = ValueNotifier<bool>(false);
   bool _isMeTyping = false;
   DateTime? _lastTypingTime;
   bool? _isOtherUserOnline;
@@ -81,6 +81,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _onTextChanged() {
+    // Force a rebuild to toggle between Mic and Send icons
+    if (mounted) setState(() {});
+
     if (_socket == null) return;
     
     if (!_isMeTyping && _messageController.text.isNotEmpty) {
@@ -378,6 +381,15 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
     _scrollController.dispose();
+    // Issue #143: Cleanup socket listeners
+    _socket?.off('receive_message');
+    _socket?.off('message_deleted_everyone');
+    _socket?.off('message_status');
+    // Issue #147: Stop and dispose recorder
+    if (_isRecording) {
+      _audioRecorder.stop();
+    }
+    _audioRecorder.dispose();
     super.dispose();
   }
 
@@ -396,29 +408,59 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
-    if (_socket == null || _currentUser == null) return;
-
     final String text = _messageController.text.trim();
-    _messageController.clear();
-
-    final String clientMsgId = _uuid.v4();
+    if (text.isEmpty) return;
+    if (_currentUser == null) return;
     
+    // Issue #135: Message length validation
+    if (text.length > 10000) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Message is too long (max 10,000 characters)'))
+      );
+      return;
+    }
+
+    // Don't clear controller yet - wait for encryption success if possible
+    final String clientMsgId = _uuid.v4();
     _notificationPlayer.play(AssetSource('sounds/send.mp3'));
 
     try {
-      if (_otherUser == null) return;
+      // If otherUser is missing (offline), try to find them in local DB
+      if (_otherUser == null) {
+        final chat = await DatabaseService().getChat(widget.chatId);
+        if (chat != null) {
+          final participants = chat['participants'] as List;
+          final other = participants.firstWhere((p) => p['_id'] != _currentUser?.id, orElse: () => null);
+          if (other != null) {
+            _otherUser = UserModel.fromJson(other);
+          }
+        }
+      }
+
+      if (_otherUser == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to send. User details missing.'))
+        );
+        return;
+      }
+
+      _messageController.clear();
+
       // 1. Encrypt text via Signal Protocol
       final encryptedBody = await _sessionService.encryptMessage(_otherUser!.id, text);
       
       final msgData = {
         'chatId': widget.chatId,
         'ciphertext': encryptedBody['body'],
-        'signalType': encryptedBody['type'], // PreKey or Signal message
+        'signalType': encryptedBody['type'], 
         'clientMsgId': clientMsgId,
+        'timestamp': DateTime.now().toIso8601String(),
+        'senderId': _currentUser!.id,
+        'type': 'text',
       };
 
-      _socket!.emit('send_message', msgData);
+      // Use queue for reliable delivery
+      MessageQueue().enqueue(msgData);
 
       final msg = {
         'chatId': widget.chatId,
@@ -434,23 +476,29 @@ class _ChatScreenState extends State<ChatScreen> {
         _scrollToBottom();
       });
 
-      // Persist locally - OUTSIDE setState
+      // Persist locally
       await DatabaseService().saveMessage(msg);
     } catch (e) {
       print('Encryption Error: $e');
-      // Fallback or show error
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Security Error: $e'))
+      );
     }
   }
 
   Future<void> _startRecording() async {
     try {
-      if (await _audioRecorder.hasPermission()) {
+      if (await Permission.microphone.request().isGranted) {
         final directory = await getTemporaryDirectory();
         _recordingPath = '${directory.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
         
         const config = RecordConfig();
         await _audioRecorder.start(config, path: _recordingPath!);
         setState(() => _isRecording = true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is required for voice messages'))
+        );
       }
     } catch (e) {
       print('Start recording error: $e');
@@ -498,8 +546,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final voiceUrl = data['url'];
+        _sendVoiceMessage(data['url']);
         
+        // Issue #119/120: Cleanup temporary recording file
+        if (_recordingPath != null) {
+          final file = File(_recordingPath!);
+          if (await file.exists()) {
+            await file.delete();
+            print('✅ Temporary recording deleted: $_recordingPath');
+          }
+        }
+      }
+  
         // 3. Prepare Media Metadata (Key, Nonce, Mac)
         final mediaMetadata = {
           'key': encryptedData['key'],
@@ -591,6 +649,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final mediaUrl = data['url'];
+        
+        // Issue #119/120: Cleanup temporary media file
+        if (await encryptedFile.exists()) {
+          await encryptedFile.delete();
+        }
         
         // 3. Prepare Media Metadata (Key, Nonce, Mac)
         final mediaMetadata = {
@@ -699,9 +762,34 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  void _deleteMessageForEveryone(String msgId) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete for Everyone?'),
+        content: Text('This message will be deleted for all participants. They may have already seen it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), 
+            child: Text('Delete', style: TextStyle(color: Colors.red))
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && _socket != null) {
+      _socket!.emit('delete_message_everyone', {'msgId': msgId});
+    }
+  }
+
   void _deleteMessage(String? msgId, bool everyone) {
     if (msgId == null || _socket == null) return;
-    _socket!.emit('delete_message', {'msgId': msgId, 'everyone': everyone});
+    if (everyone) {
+      _deleteMessageForEveryone(msgId);
+    } else {
+      _socket!.emit('delete_message', {'msgId': msgId, 'everyone': false});
+    }
   }
 
   void _editMessagePrompt(Map<String, dynamic> msg) {
@@ -887,12 +975,14 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         child: Column(
           children: [
+            // Filter messages based on search query
+            // This logic is moved outside the ListView.builder to avoid re-calculating on every item build
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
                 reverse: true,
                 padding: EdgeInsets.all(16),
-                itemCount: _isSearching && _searchQuery.isNotEmpty 
+                itemCount: _isSearching && _searchQuery.isNotEmpty
                   ? _messages.where((m) => (m['ciphertext'] ?? '').toString().toLowerCase().contains(_searchQuery)).length
                   : _messages.length,
                 itemBuilder: (context, index) {
@@ -1196,6 +1286,14 @@ class _ChatScreenState extends State<ChatScreen> {
     final String? encryptedUrl = msg['mediaUrl'];
     if (encryptedUrl == null || msgId.isEmpty) return;
 
+    // Issue #109/121: Check permission
+    if (Platform.isAndroid) {
+      if (!await Permission.storage.request().isGranted && !await Permission.photos.request().isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Storage permission required to download media')));
+        return;
+      }
+    }
+
     try {
       setState(() => _downloadProgress[msgId] = 0);
 
@@ -1257,91 +1355,112 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildMessageInput() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: Offset(0, -5),
-          )
-        ]
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            IconButton(
-              icon: _isUploading 
-                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(Icons.attach_file, color: Colors.blueAccent),
-              onPressed: _isUploading ? null : _pickImage,
-            ),
-            Expanded(
-              child: _isRecording
-                ? Container(
-                    height: 48,
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.red[50],
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.mic, color: Colors.red, size: 20),
-                        SizedBox(width: 8),
-                        Text('Recording...', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                        Spacer(),
-                        TextButton(
-                          onPressed: () {
-                            _audioRecorder.stop();
-                            setState(() => _isRecording = false);
-                          },
-                          child: Text('Cancel', style: TextStyle(color: Colors.grey)),
-                        )
-                      ],
-                    ),
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: TextField(
-                      controller: _messageController,
-                      decoration: InputDecoration(
-                        hintText: 'Message',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      ),
-                      maxLines: null,
-                    ),
-                  ),
-            ),
-            SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: _isRecording ? Colors.red : Colors.blueAccent,
-                shape: BoxShape.circle,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ValueListenableBuilder<bool>(
+          valueListenable: _isOtherUserTypingNotifier,
+          builder: (context, isTyping, child) {
+            if (!isTyping) return SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+              child: Text(
+                '${widget.chatName} is typing...',
+                style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 13),
               ),
-              child: _messageController.text.isEmpty && !_isRecording
-                ? GestureDetector(
-                    onLongPress: _startRecording,
-                    onLongPressUp: _stopRecording,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Icon(Icons.mic, color: Colors.white),
-                    ),
-                  )
-                : IconButton(
-                    icon: Icon(_isRecording ? Icons.send : Icons.send, color: Colors.white),
-                    onPressed: _isRecording ? _stopRecording : _sendMessage,
-                  ),
-            ),
-          ],
+            );
+          },
         ),
-      ),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).brightness == Brightness.dark ? Colors.grey[900] : Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: Offset(0, -3),
+              )
+            ]
+          ),
+          child: SafeArea(
+            child: Row(
+              children: [
+                IconButton(
+                  icon: _isUploading 
+                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(Icons.attach_file, color: Colors.blueAccent),
+                  onPressed: _isUploading ? null : _pickImage,
+                ),
+                Expanded(
+                  child: _isRecording
+                    ? Container(
+                        height: 48,
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.red[50],
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.mic, color: Colors.red, size: 20),
+                            SizedBox(width: 8),
+                            Text('Recording...', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                            Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                _audioRecorder.stop();
+                                setState(() => _isRecording = false);
+                              },
+                              child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+                            )
+                          ],
+                        ),
+                      )
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: TextField(
+                          controller: _messageController,
+                          style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black),
+                          decoration: InputDecoration(
+                            hintText: 'Message',
+                            hintStyle: TextStyle(color: Colors.grey),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
+                          maxLines: null,
+                        ),
+                      ),
+                ),
+                SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: _isRecording ? Colors.red : Colors.blueAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: _messageController.text.isEmpty && !_isRecording
+                    ? GestureDetector(
+                        onLongPress: _startRecording,
+                        onLongPressUp: _stopRecording,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Icon(Icons.mic, color: Colors.white),
+                        ),
+                      )
+                    : IconButton(
+                        icon: Icon(Icons.send, color: Colors.white),
+                        onPressed: _isRecording ? _stopRecording : _sendMessage,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

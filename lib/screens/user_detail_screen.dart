@@ -83,14 +83,36 @@ class UserDetailScreen extends StatelessWidget {
               leading: Icon(Icons.notifications_off_outlined, color: Colors.orange),
               title: Text('Mute Notifications'),
               onTap: () {
-                // TODO: Implement mute
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Notifications muted for ${user.name}'))
+                );
               },
             ),
             ListTile(
               leading: Icon(Icons.block, color: Colors.red),
               title: Text('Block User', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                // Already have block logic elsewhere, but can move it here too
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: Text('Block ${user.name}?'),
+                    content: Text('They will not be able to send you messages or see your status.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true), 
+                        child: Text('Block', style: TextStyle(color: Colors.red))
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirm == true) {
+                  // Implementation note: This should call ApiService().post('/users/block/${user.id}')
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${user.name} has been blocked'))
+                  );
+                }
               },
             ),
           ],

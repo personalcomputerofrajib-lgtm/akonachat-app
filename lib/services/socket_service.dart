@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../config/constants.dart';
 import 'auth_service.dart';
+import 'message_queue.dart';
 
 class SocketService {
   static final SocketService _instance = SocketService._internal();
@@ -120,6 +121,11 @@ class SocketService {
     _socket!.on('connect_error', (error) {
       _connectionError = 'Connection error: $error';
       print('❌ Socket Connect Error: $error');
+    });
+
+    _socket!.on('connect', (_) {
+      print('✅ Socket Connected Event - Processing Queue');
+      MessageQueue().processQueue();
     });
   }
 

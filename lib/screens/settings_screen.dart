@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../services/theme_service.dart';
 import '../services/auth_service.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
+import 'privacy_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   @override
@@ -29,19 +31,45 @@ class SettingsScreen extends StatelessWidget {
             onChanged: (val) => themeService.toggleTheme(),
           ),
           Divider(),
+          _buildSectionHeader('Notifications', isDark),
+          SwitchListTile(
+            title: Text('Sound', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            subtitle: Text('Play sound for new messages', style: TextStyle(color: Colors.grey)),
+            secondary: Icon(Icons.notifications_outlined, color: Colors.blueAccent),
+            value: true, 
+            onChanged: (val) {
+              // Implementation note: This would typically update a SettingsProvider/Service
+            },
+          ),
+          SwitchListTile(
+            title: Text('Vibration', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
+            subtitle: Text('Vibrate for new messages', style: TextStyle(color: Colors.grey)),
+            secondary: Icon(Icons.vibration, color: Colors.blueAccent),
+            value: true,
+            onChanged: (val) {
+              // Implementation note: This would typically update a SettingsProvider/Service
+            },
+          ),
+          Divider(),
           _buildSectionHeader('Account', isDark),
           ListTile(
             leading: Icon(Icons.person_outline, color: Colors.blueAccent),
             title: Text('Profile Settings', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
             onTap: () {
-              // Navigate to Profile Editing
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfileScreen()),
+              );
             },
           ),
           ListTile(
             leading: Icon(Icons.privacy_tip_outlined, color: Colors.blueAccent),
             title: Text('Privacy & Security', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
             onTap: () {
-              // Navigate to privacy settings
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => PrivacySettingsScreen()),
+              );
             },
           ),
           Divider(),

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import '../services/api_service.dart';
 import 'profile_setup_screen.dart';
 
 class UsernameSetupScreen extends StatefulWidget {
@@ -14,8 +13,15 @@ class UsernameSetupScreen extends StatefulWidget {
 class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final AuthService _authService = AuthService();
+  final ApiService _apiService = ApiService();
   bool _isLoading = false;
   String? _errorMessage;
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
 
   void _submitUsername() async {
     final username = _usernameController.text.trim();
@@ -36,15 +42,10 @@ class _UsernameSetupScreenState extends State<UsernameSetupScreen> {
     });
 
     try {
-      final token = await _authService.getToken();
-      final response = await http.post(
-        Uri.parse('${Constants.apiUrl}/users/username'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'username': username}),
-      ).timeout(const Duration(seconds: 15));
+      final response = await _apiService.post(
+        '/users/username',
+        body: {'username': username},
+      );
 
       if (response.statusCode == 200) {
         // Update local user data first

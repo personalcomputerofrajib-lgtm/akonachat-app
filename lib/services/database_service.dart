@@ -1,19 +1,34 @@
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart';
 import 'dart:convert';
+import 'dart:async'; // Import for Completer
 import 'security_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   static Database? _database;
 
+  static Completer<Database>? _dbCompleter;
+  
   factory DatabaseService() => _instance;
   DatabaseService._internal();
-
+  
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
+    
+    // Use a completer to prevent multiple initialization calls
+    if (_dbCompleter != null) return _dbCompleter!.future;
+    
+    _dbCompleter = Completer<Database>();
+    try {
+      _database = await _initDatabase();
+      _dbCompleter!.complete(_database);
+      return _database!;
+    } catch (e) {
+      _dbCompleter!.completeError(e);
+      _dbCompleter = null; // Allow retry on error
+      rethrow;
+    }
   }
 
   Future<Database> _initDatabase() async {
@@ -98,7 +113,7 @@ class DatabaseService {
 
   Future<List<Map<String, dynamic>>> getMessages(String chatId) async {
     final db = await database;
-    final results = await db.query('messages', where: 'chatId = ?', whereArgs: [chatId], orderBy: 'sequence DESC');
+    final results = await db.query('messages', where: 'chatId = ?', whereArgs: [chatId], orderBy: 'createdAt DESC');
     
     // Convert status/boolean/json back for UI consumption
     return results.map((m) {
@@ -114,6 +129,17 @@ class DatabaseService {
       }
       return msg;
     }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingMessages() async {
+    final db = await database;
+    return await db.query('messages', where: 'status = ?', whereArgs: ['pending']);
+  }
+
+  Future<void> updateMessageStatus(String? clientMsgId, String status) async {
+    if (clientMsgId == null) return;
+    final db = await database;
+    await db.update('messages', {'status': status}, where: 'clientMsgId = ?', whereArgs: [clientMsgId]);
   }
 
   // --- Chat Methods ---

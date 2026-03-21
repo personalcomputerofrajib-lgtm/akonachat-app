@@ -22,16 +22,21 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    // Issue #115: Strict validation
+    if (json['_id'] == null || json['email'] == null || json['name'] == null) {
+      throw FormatException('UserModel.fromJson: Missing required fields');
+    }
+
     return UserModel(
-      id: json['_id'] ?? '',
-      email: json['email'] ?? '',
-      name: json['name'] ?? '',
-      profilePic: json['profilePic'] ?? '',
-      username: json['username'],
-      about: json['about'],
-      hasCompletedOnboarding: json['hasCompletedOnboarding'] ?? false,
-      isOnline: json['isOnline'],
-      lastSeen: json['lastSeen'] != null ? DateTime.parse(json['lastSeen']) : null,
+      id: json['_id'].toString(),
+      email: json['email'].toString(),
+      name: json['name'].toString(),
+      profilePic: json['profilePic']?.toString() ?? '',
+      username: json['username']?.toString(),
+      about: json['about']?.toString(),
+      hasCompletedOnboarding: json['hasCompletedOnboarding'] == true,
+      isOnline: json['isOnline'] == true,
+      lastSeen: json['lastSeen'] != null ? DateTime.tryParse(json['lastSeen'].toString()) : null,
     );
   }
 

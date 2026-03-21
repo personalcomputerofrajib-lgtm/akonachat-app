@@ -1,16 +1,13 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../config/constants.dart';
-import '../models/user_model.dart';
-import 'security_service.dart';
+import 'api_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
+    // Force webClientId if serverClientId is not set correctly in constants
     serverClientId: Constants.webClientId,
     scopes: ['email', 'profile'],
   );
+
+  final ApiService _apiService = ApiService();
 
   /// Initiate Google Sign-In and authenticate with Backend
   /// Returns a map with 'user' (UserModel) and 'requiresUsername' (bool)
@@ -26,12 +23,11 @@ class AuthService {
 
       if (idToken == null) throw Exception("Failed to retrieve ID Token from Google.");
 
-      // 3. Send ID Token to our backend
-      final response = await http.post(
-        Uri.parse('${Constants.apiUrl}/auth/google'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'idToken': idToken}),
-      ).timeout(const Duration(seconds: 15));
+      // 3. Send ID Token to our backend via ApiService
+      final response = await _apiService.post(
+        '/auth/google',
+        body: {'idToken': idToken},
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -44,12 +40,14 @@ class AuthService {
         await prefs.setString(Constants.tokenKey, token);
         await prefs.setString(Constants.userKey, jsonEncode(user.toJson()));
 
-        // 5. Initialize Encryption Keys (Signal Protocol)
+        // 5. Initialize Encryption Keys (Signal Protocol) - CRITICAL: Must succeed
         try {
           await SecurityService().initializeKeys();
         } catch (e) {
-          print("Security Key Initialization Error: $e");
-          // Non-blocking but should be logged.
+          print("🚨 Security Key Initialization Error: $e");
+          // If security init fails, we MUST logout and fail the auth flow
+          await signOut();
+          return null; 
         }
 
         return {

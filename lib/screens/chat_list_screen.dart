@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config/constants.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
@@ -12,6 +10,7 @@ import 'chat_screen.dart';
 import 'profile_screen.dart';
 import 'user_search_screen.dart';
 import 'settings_screen.dart';
+import '../services/api_service.dart';
 import '../services/database_service.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -21,10 +20,12 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final AuthService _authService = AuthService();
+  final ApiService _apiService = ApiService();
   List<dynamic> _chats = [];
   bool _isLoading = true;
   String? _errorMessage;
   UserModel? _currentUser;
+  bool _isNavigating = false;
 
   @override
   void initState() {
@@ -39,31 +40,39 @@ class _ChatListScreenState extends State<ChatListScreen> {
         _errorMessage = null;
       });
 
-      // Add a global timeout to prevent infinite loading
+      // 1. LOAD LOCAL DATA IMMEDIATELY (Instant start)
+      await _loadLocalChats();
+
+      // 2. CONNECT IN BACKGROUND
       await Future.any([
         _initAppInternal(),
-        Future.delayed(const Duration(seconds: 30), () {
-          throw TimeoutException('App initialization took too long (30s)');
+        Future.delayed(const Duration(seconds: 15), () {
+          // If we have local data, don't throw - just warn
+          if (_chats.isNotEmpty) {
+            print('⚠️ Socket connection timed out, but viewing offline.');
+          } else {
+            throw TimeoutException('Connection took too long');
+          }
         }),
       ]);
     } catch (e) {
       print('❌ Initialization error: $e');
       if (mounted) {
+        // Sanitize error message to hide IPs
+        String sanitizedMsg = e.toString();
+        if (sanitizedMsg.contains('http')) {
+          sanitizedMsg = 'Could not connect to the secure server. Please check your internet.';
+        }
+        
         setState(() {
-          _errorMessage = 'Initialization error: $e';
+          _errorMessage = sanitizedMsg;
           _isLoading = false;
         });
         
-        // Try to load local chats as fallback even on complete failure
-        if (_chats.isEmpty) {
-          await _loadLocalChats();
-        }
-        
-        _showRetryDialog(e.toString());
+        _showRetryDialog(sanitizedMsg);
       }
     } finally {
       if (mounted) {
-        // Only set to false if we're not showing an error or if we have data
         if (_errorMessage == null || _chats.isNotEmpty) {
           setState(() => _isLoading = false);
         }
@@ -78,7 +87,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     if (user != null) {
       final socketService = SocketService();
-      // Ensure we start with a fresh socket state if we previously failed
       socketService.reset();
       
       print('🔄 Attempting socket connection...');
@@ -88,16 +96,23 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
       if (!socketConnected) {
         final errorMsg = socketService.lastError ?? 'Socket connection failed';
-        print('❌ Socket connection failed: $errorMsg');
         
-        // Try to load local chats as fallback
-        await _loadLocalChats();
+        // Sanitize to hide IP
+        String displayError = errorMsg;
+        if (displayError.contains('http') || displayError.contains('.')) {
+          displayError = 'Server connection failed. Working in offline mode.';
+        }
+
+        print('❌ Socket failed: $displayError');
+        
+        if (_chats.isEmpty) {
+          await _loadLocalChats();
+        }
         
         setState(() {
-          _errorMessage = 'Connection Error: $errorMsg';
+          _errorMessage = displayError;
           _isLoading = false;
         });
-        _showRetryDialog(errorMsg);
         return;
       }
 
@@ -219,18 +234,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   Future<void> _fetchChats() async {
     try {
-      final token = await _authService.getToken();
-      if (token == null) return;
-
-      final response = await http.get(
-        Uri.parse('${Constants.apiUrl}/chats'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Backend not responding (10s timeout)');
-        },
-      );
+      final response = await _apiService.get('/chats');
 
       if (response.statusCode == 200) {
         final List<dynamic> fetchedChats = jsonDecode(response.body);
@@ -318,7 +322,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 tag: 'profilePic',
                 child: CircleAvatar(
                   backgroundImage: _currentUser?.profilePic != null && _currentUser!.profilePic.isNotEmpty
-                      ? CachedNetworkImageProvider(_currentUser!.profilePic)
+                      ? CachedNetworkImageProvider(_currentUser!.profilePic, cacheManager: CustomCacheManager.instance)
                       : null,
                   backgroundColor: Colors.white,
                   child: (_currentUser?.profilePic == null || _currentUser!.profilePic.isEmpty)
@@ -474,6 +478,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }) {
     return InkWell(
       onTap: () async {
+        if (_isNavigating) return;
+        _isNavigating = true;
         await Navigator.push(
           context,
           MaterialPageRoute(
@@ -482,7 +488,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               chatName: name,
             ),
           ),
-        );
+        ).then((_) => _isNavigating = false);
         // Refresh when returning from the chat to clear the unread badge
         _fetchChats();
       },
@@ -495,7 +501,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 CircleAvatar(
                   radius: 28,
                   backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                    backgroundImage: profilePic != null && profilePic.isNotEmpty ? CachedNetworkImageProvider(profilePic) : null,
+                    backgroundImage: profilePic != null && profilePic.isNotEmpty ? CachedNetworkImageProvider(profilePic, cacheManager: CustomCacheManager.instance) : null,
                   child: profilePic == null || profilePic.isEmpty 
                     ? Text(name[0], style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 20))
                     : null,

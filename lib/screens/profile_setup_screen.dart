@@ -1,45 +1,69 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../services/cache_manager.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import 'chat_list_screen.dart';
+
+import 'package:flutter/services.dart';
+import '../services/api_service.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   @override
   _ProfileSetupScreenState createState() => _ProfileSetupScreenState();
 }
 
-class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _aboutController = TextEditingController();
-  final AuthService _authService = AuthService();
+  final _nameController = TextEditingController();
+  final _aboutController = TextEditingController();
+  final _authService = AuthService();
+  final _apiService = ApiService();
+  
+  UserModel? _user;
   bool _isLoading = false;
   String? _errorMessage;
-  UserModel? _user;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _loadUser();
   }
 
-  void _loadInitialData() async {
-    final user = await _authService.loadUser();
+  void _loadUser() async {
+    final user = await _authService.getUser();
+    setState(() => _user = user);
     if (user != null) {
-      setState(() {
-        _user = user;
-        _nameController.text = user.name;
-        _aboutController.text = user.about ?? '';
-      });
+      _nameController.text = user.name;
+      _aboutController.text = user.about;
     }
   }
 
   Future<void> _pickImage() async {
+    // Check permission based on platform/version
+    if (Platform.isAndroid) {
+      // For Android 13 (SDK 33) and above, we use photos permission
+      // For below, we use storage
+      final status = await Permission.photos.status;
+      if (status.isDenied) {
+        final result = await Permission.photos.request();
+        if (result.isPermanentlyDenied) {
+          _showPermissionDialog();
+          return;
+        }
+        if (!result.isGranted) return;
+      }
+    } else if (Platform.isIOS) {
+      final status = await Permission.photos.status;
+      if (status.isDenied || status.isLimited) {
+        final result = await Permission.photos.request();
+        if (!result.isGranted && !result.isLimited) return;
+      }
+    }
+
     final ImagePicker picker = ImagePicker();
     try {
       final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
@@ -49,6 +73,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     } catch (e) {
       print('Error picking image: $e');
     }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Permission Needed'),
+        content: Text('AkonaChat needs access to your photos to set a profile picture. Please enable it in settings.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: Text('Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _uploadProfileImage(File file) async {
@@ -88,6 +132,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
     } catch (e) {
       print('Upload error: $e');
+      setState(() => _errorMessage = 'Server error during upload. Please try again.');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -101,6 +146,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       setState(() => _errorMessage = 'Display name cannot be empty');
       return;
     }
+    if (name.length > 50) {
+      setState(() => _errorMessage = 'Display name cannot exceed 50 characters');
+      return;
+    }
+    if (about.length > 150) {
+      setState(() => _errorMessage = 'About / Bio cannot exceed 150 characters');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -108,19 +161,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     });
 
     try {
-      final token = await _authService.getToken();
-      final response = await http.patch(
-        Uri.parse('${Constants.apiUrl}/users/profile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
+      final response = await _apiService.patch(
+        '/users/profile',
+        body: {
           'name': name,
           'about': about,
           'profilePic': _user?.profilePic,
-        }),
-      ).timeout(const Duration(seconds: 15));
+        },
+      );
 
       if (response.statusCode == 200) {
         // Update local user data
@@ -168,7 +216,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         radius: 50,
                         backgroundColor: Colors.blueAccent.withOpacity(0.1),
                         backgroundImage: _user?.profilePic != null && _user!.profilePic.isNotEmpty 
-                          ? CachedNetworkImageProvider(_user!.profilePic) 
+                          ? CachedNetworkImageProvider(_user!.profilePic, cacheManager: CustomCacheManager.instance) 
                           : null,
                         child: _user?.profilePic == null || _user!.profilePic.isEmpty 
                           ? Icon(Icons.person, size: 50, color: Colors.blueAccent) 
@@ -200,6 +248,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     filled: true,
                     fillColor: Colors.grey[50],
                   ),
+                  maxLength: 50,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                  ],
                 ),
                 SizedBox(height: 16),
                 TextField(
@@ -213,6 +265,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     filled: true,
                     fillColor: Colors.grey[50],
                   ),
+                  maxLength: 200,
                 ),
                 if (_errorMessage != null) ...[
                   SizedBox(height: 16),

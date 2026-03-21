@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import '../services/cache_manager.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+import '../services/api_service.dart';
 import 'chat_screen.dart';
 
 class UserSearchScreen extends StatefulWidget {
@@ -15,8 +14,15 @@ class UserSearchScreen extends StatefulWidget {
 class _UserSearchScreenState extends State<UserSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final AuthService _authService = AuthService();
+  final ApiService _apiService = ApiService();
   List<UserModel> _searchResults = [];
   bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   void _searchUsers(String query) async {
     if (query.isEmpty) {
@@ -27,13 +33,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final token = await _authService.getToken();
-      final response = await http.get(
-        Uri.parse('${Constants.apiUrl}/users/search?q=$query'),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-      );
+      // Issue #136: Sanitize/Encode query
+      final encodedQuery = Uri.encodeComponent(query);
+      final response = await _apiService.get('/users/search?q=$encodedQuery');
 
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
@@ -51,14 +53,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
   void _startChat(UserModel otherUser) async {
     setState(() => _isLoading = true);
     try {
-      final token = await _authService.getToken();
-      final response = await http.post(
-        Uri.parse('${Constants.apiUrl}/chats/private'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'targetUserId': otherUser.id}),
+      final response = await _apiService.post(
+        '/chats/private',
+        body: {'targetUserId': otherUser.id},
       );
 
       if (response.statusCode == 200) {
@@ -86,14 +83,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
   void _blockUser(String userId) async {
     setState(() => _isLoading = true);
     try {
-      final token = await _authService.getToken();
-      final response = await http.post(
-        Uri.parse('${Constants.apiUrl}/users/block'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({'userIdToBlock': userId}),
+      final response = await _apiService.post(
+        '/users/block',
+        body: {'userIdToBlock': userId},
       );
 
       if (response.statusCode == 200) {
@@ -149,7 +141,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                       final user = _searchResults[index];
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: user.profilePic.isNotEmpty ? CachedNetworkImageProvider(user.profilePic) : null,
+                          backgroundImage: user.profilePic.isNotEmpty ? CachedNetworkImageProvider(user.profilePic, cacheManager: CustomCacheManager.instance) : null,
                           backgroundColor: Colors.blueAccent.withOpacity(0.1),
                           child: user.profilePic.isEmpty ? Icon(Icons.person, color: Colors.blueAccent) : null,
                         ),

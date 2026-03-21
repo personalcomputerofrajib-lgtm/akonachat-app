@@ -71,6 +71,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void _checkAuth() async {
     try {
       final user = await _authService.loadUser();
+      
+      if (user != null) {
+        // Initialize Security and Database before letting user in
+        await SecurityService().initializeKeys();
+        // Trigger DB init early
+        await DatabaseService().database;
+      }
+
       if (mounted) {
         setState(() {
           _user = user;
@@ -78,12 +86,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
         });
       }
     } catch (e) {
-      print('❌ Auth check error: $e');
+      print('❌ Initialization error: $e');
       if (mounted) {
         setState(() {
           _user = null;
           _isLoading = false;
         });
+        // Show error dialog to user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to initialize security systems: $e'),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 5),
+          ),
+        );
       }
     }
   }

@@ -10,7 +10,7 @@ class FullScreenImageViewer extends StatelessWidget {
 
   Future<void> _saveToGallery(BuildContext context) async {
     final status = await Permission.storage.request();
-    if (status.isGranted || true) {
+    if (status.isGranted) {
       try {
         await Gal.putImageBytes(await http.readBytes(Uri.parse(imageUrl)));
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to Gallery!')));
