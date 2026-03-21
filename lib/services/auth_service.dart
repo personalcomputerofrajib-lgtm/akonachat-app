@@ -8,7 +8,7 @@ import 'security_service.dart';
 
 class AuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    // Force webClientId if serverClientId is not set correctly in constants
+    clientId: Constants.androidClientId,
     serverClientId: Constants.webClientId,
     scopes: ['email', 'profile'],
   );

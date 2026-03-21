@@ -4,9 +4,11 @@ class Constants {
   // Local Testing: 'http://localhost:9000'
   static const String apiUrl = 'http://52.66.216.152:9000/api';
   
-  // Google Web Client ID (for requesting the ID token for backend)
+  // Google Client IDs
   static const String webClientId = 
       '196123415057-tengfcv2ude47c7je9vv101r2pnqju0m.apps.googleusercontent.com';
+  static const String androidClientId = 
+      '196123415057-liqimnfp9t2l819o8lcuaqdbne1rrkn9.apps.googleusercontent.com';
   
   // Storage keys
   static const String tokenKey = 'auth_token';

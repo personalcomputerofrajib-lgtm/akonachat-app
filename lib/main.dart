@@ -11,6 +11,27 @@ import 'services/theme_service.dart';
 import 'models/user_model.dart';
 
 void main() {
+  // Capture all Flutter errors and show them on screen for debugging
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
+    runApp(MaterialApp(
+      home: Scaffold(
+        backgroundColor: Colors.red[900],
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: SingleChildScrollView(
+              child: Text(
+                "CRITICAL ERROR:\n\n${details.exception}\n\nSTACK TRACE:\n${details.stack}",
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'monospace'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+  };
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeService(),
