@@ -40,7 +40,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() => _user = user);
     if (user != null) {
       _nameController.text = user.name;
-      _aboutController.text = user.about;
+      _aboutController.text = user.about ?? '';
     }
   }
 
