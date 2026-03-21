@@ -262,16 +262,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
 
-  void _logout() async {
-    SocketService().reset();
-    await _authService.signOut();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => LoginScreen()),
-      (route) => false,
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -654,6 +645,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
     } catch (e) {
       print('Error loading remote chats: $e');
     }
+  }
+
   Future<void> _logout() async {
     SocketService().reset();
     await _authService.signOut();
