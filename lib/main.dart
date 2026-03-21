@@ -69,73 +69,31 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    // Use a small delay to ensure the context is ready for error display if needed
-    Future.delayed(Duration.zero, _checkAuth);
+    _checkAuth();
   }
 
   void _checkAuth() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _isLoading = true;
-      _initError = null;
-    });
-
     try {
-      print('🚀 Starting AkonaChat Secure Initialization...');
+      final user = await _authService.loadUser();
       
-      // 1. Load User Cache (with timeout)
-      final user = await _authService.loadUser().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw TimeoutException('User data loading timed out.'),
-      );
-      
-      if (user != null) {
-        print('👤 User detected: ${user.username}. initializing secure protocols...');
-        
-        // 2. Initialize Signal Protocol Keys
-        await SecurityService().initializeKeys().timeout(
-          const Duration(seconds: 15),
-          onTimeout: () => throw TimeoutException('Security Key handshake timed out.'),
-        );
-        
-        // 3. Initialize Local Encrypted Database
-        print('🗄️ Loading encrypted local database...');
-        await DatabaseService().database.timeout(
-          const Duration(seconds: 15),
-          onTimeout: () => throw TimeoutException('Database decryption timed out.'),
-        );
-
-        // 4. Background: Daily Reward Claim (Non-blocking)
-        _authService.claimDailyReward().catchError((e) {
-          print('⚠️ Daily reward non-critical error: $e');
-          return null;
-        }).then((rewardData) {
-          if (rewardData != null && mounted) {
-             ScaffoldMessenger.of(context).showSnackBar(
-               SnackBar(
-                 content: Text('🔥 ${rewardData['streak']} Day Streak! +${rewardData['reward']} Coins!'),
-                 backgroundColor: Colors.orangeAccent,
-                 behavior: SnackBarBehavior.floating,
-               ),
-             );
-          }
-        });
-      }
-
       if (mounted) {
         setState(() {
           _user = user;
           _isLoading = false;
         });
-        print('✅ All systems online.');
+
+        if (user != null) {
+          // Non-blocking background initializations
+          SecurityService().initializeKeys().catchError((e) => print('Security init ignored: $e'));
+          _authService.claimDailyReward();
+        }
       }
     } catch (e) {
-      print('❌ CRITICAL STARTUP ERROR: $e');
+      print('Auth check failed: $e');
       if (mounted) {
         setState(() {
-          _initError = e.toString();
           _isLoading = false;
+          _user = null;
         });
       }
     }
