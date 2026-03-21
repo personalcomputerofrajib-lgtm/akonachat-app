@@ -871,111 +871,6 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 0,
-        title: _isSearching 
-          ? TextField(
-              controller: _searchController,
-              autofocus: true,
-              style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
-              decoration: InputDecoration(
-                hintText: 'Search messages...',
-                hintStyle: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54),
-                border: InputBorder.none,
-              ),
-              onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
-            )
-          : GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => UserDetailScreen(userId: _otherUser?.id ?? (widget.chatId.contains('_') ? null : widget.chatId))),
-            );
-          },
-          child: Row(
-            children: [
-              Hero(
-                tag: 'profile_pic_${_otherUser?.id ?? widget.chatId}',
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.blueAccent.withOpacity(0.1),
-                  backgroundImage: _otherUser?.profilePic != null && _otherUser!.profilePic!.isNotEmpty
-                      ? CachedNetworkImageProvider(_otherUser!.profilePic!)
-                      : null,
-                  child: (_otherUser?.profilePic == null || _otherUser!.profilePic!.isEmpty)
-                      ? Text(widget.chatName.isNotEmpty ? widget.chatName[0] : 'U', 
-                        style: TextStyle(color: Colors.blueAccent, fontSize: 14))
-                      : null,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.chatName, 
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      _isOtherUserTyping 
-                        ? 'typing...' 
-                        : (_isOtherUserOnline == true ? 'Online' : _formatLastSeen(_lastSeen)),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _isOtherUserOnline == true || _isOtherUserTyping ? Colors.green : Colors.grey,
-                        fontWeight: (_isOtherUserOnline == true || _isOtherUserTyping) ? FontWeight.w500 : FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.grey[900] : Colors.white,
-        foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
-        elevation: 0.5,
-        actions: [
-          if (_isSearching)
-            IconButton(
-              icon: Icon(Icons.close),
-              onPressed: () => setState(() {
-                _isSearching = false;
-                _searchQuery = '';
-                _searchController.clear();
-              }),
-            )
-          else
-            IconButton(
-              icon: Icon(Icons.search),
-              onPressed: () => setState(() => _isSearching = true),
-            ),
-          IconButton(
-            icon: Icon(Icons.palette_outlined),
-            onPressed: _showCustomizationMenu,
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'reset_session') {
-                _resetSecureSession();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'reset_session',
-                child: Row(
-                  children: [
-                    Icon(Icons.security_update_warning, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Reset Secure Session'),
-                  ],
-                ),
-              ),
-            ],
-          ),
       backgroundColor: _chatBackgroundColor,
       appBar: _buildAppBar(),
       body: Container(
@@ -988,7 +883,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               )
             : null,
-        ),
         child: Column(
           children: [
             // Filter messages based on search query
@@ -1514,6 +1408,116 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      titleSpacing: 0,
+      title: _isSearching 
+        ? TextField(
+            controller: _searchController,
+            autofocus: true,
+            style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
+            decoration: InputDecoration(
+              hintText: 'Search messages...',
+              hintStyle: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black54),
+              border: InputBorder.none,
+            ),
+            onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+          )
+        : GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => UserDetailScreen(userId: _otherUser?.id ?? (widget.chatId.contains('_') ? null : widget.chatId))),
+          );
+        },
+        child: Row(
+          children: [
+            Hero(
+              tag: 'profile_pic_${_otherUser?.id ?? widget.chatId}',
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                backgroundImage: _otherUser?.profilePic != null && _otherUser!.profilePic!.isNotEmpty
+                    ? CachedNetworkImageProvider(_otherUser!.profilePic!)
+                    : null,
+                child: (_otherUser?.profilePic == null || _otherUser!.profilePic!.isEmpty)
+                    ? Text(widget.chatName.isNotEmpty ? widget.chatName[0] : 'U', 
+                      style: TextStyle(color: Colors.blueAccent, fontSize: 14))
+                    : null,
+              ),
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.chatName, 
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    _isOtherUserTyping 
+                      ? 'typing...' 
+                      : (_isOtherUserOnline == true ? 'Online' : _formatLastSeen(_lastSeen)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _isOtherUserOnline == true || _isOtherUserTyping ? Colors.green : Colors.grey,
+                      fontWeight: (_isOtherUserOnline == true || _isOtherUserTyping) ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.grey[900] : Colors.white,
+      foregroundColor: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black,
+      elevation: 0.5,
+      actions: [
+        if (_isSearching)
+          IconButton(
+            icon: Icon(Icons.close),
+            onPressed: () => setState(() {
+              _isSearching = false;
+              _searchQuery = '';
+              _searchController.clear();
+            }),
+          )
+        else
+          IconButton(
+            icon: Icon(Icons.search),
+            onPressed: () => setState(() => _isSearching = true),
+          ),
+        IconButton(
+          icon: Icon(Icons.palette_outlined),
+          onPressed: _showCustomizationMenu,
+        ),
+        PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'reset_session') {
+              _resetSecureSession();
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'reset_session',
+              child: Row(
+                children: [
+                  Icon(Icons.security_update_warning, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Reset Secure Session'),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     );

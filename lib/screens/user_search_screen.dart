@@ -170,7 +170,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => UserDetailScreen(user: user),
+                              builder: (context) => UserDetailScreen(userId: user.id),
                             ),
                           );
                         },

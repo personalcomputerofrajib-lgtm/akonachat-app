@@ -261,51 +261,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  Future<void> _loadLocalChats() async {
-    final localChats = await DatabaseService().getChats();
-    if (localChats.isNotEmpty && mounted) {
-      setState(() {
-        _chats = localChats;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _fetchChats() async {
-    try {
-      final response = await _apiService.get('/chats');
-
-      if (response.statusCode == 200) {
-        final List<dynamic> fetchedChats = jsonDecode(response.body);
-        if (mounted) {
-          setState(() {
-            _chats = fetchedChats;
-            _errorMessage = null; 
-          });
-        }
-
-        // Save to local database
-        for (var chat in fetchedChats) {
-          await DatabaseService().saveChat(chat);
-        }
-      } else if (response.statusCode == 401) {
-        _logout();
-      }
-    } catch (e) {
-      print('Error fetching chats: $e');
-      if (mounted && _chats.isEmpty) {
-         setState(() => _errorMessage = 'Failed to load chats: $e');
-      }
-    }
-  }
 
   void _logout() async {
     SocketService().reset();
     await _authService.signOut();
     if (!mounted) return;
-    Navigator.pushReplacement(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => LoginScreen()),
+      (route) => false,
     );
   }
 
@@ -433,7 +397,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
-            onPressed: _fetchChats,
+            onPressed: _loadChats,
           ),
           IconButton(
             icon: Icon(Icons.settings_outlined),
@@ -543,7 +507,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ),
         ).then((_) => _isNavigating = false);
         // Refresh when returning from the chat to clear the unread badge
-        _fetchChats();
+        _loadChats();
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -646,6 +610,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
     if (difference.inHours < 24) return '${difference.inHours}h';
     if (difference.inDays < 7) return '${difference.inDays}d';
     return '${time.day}/${time.month}';
+  }
+
   Future<void> _loadLocalChats() async {
     try {
       final localChats = await DatabaseService().getChats();
@@ -688,16 +654,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
     } catch (e) {
       print('Error loading remote chats: $e');
     }
-  }
-
   Future<void> _logout() async {
-    await _authService.logout();
-    if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-        (route) => false,
-      );
-    }
+    SocketService().reset();
+    await _authService.signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => LoginScreen()),
+      (route) => false,
+    );
   }
 }

@@ -302,7 +302,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
               scrollDirection: Axis.horizontal,
               itemCount: user.gifts!.length,
               itemBuilder: (context, i) => Container(
-                margin: const EdgeInsets.only(right: i == 0 ? 0 : 8),
+                margin: EdgeInsets.only(right: i == 0 ? 0 : 8),
                 child: CircleAvatar(
                   backgroundColor: Colors.pink.withOpacity(0.05),
                   radius: 25,
@@ -445,6 +445,28 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLevelBadge(bool isCyber) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.blueAccent.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.star, size: 12, color: Colors.blueAccent),
+          const SizedBox(width: 4),
+          Text(
+            'Lv.${user.level ?? 1}',
+            style: const TextStyle(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.bold),
           ),
         ],
       ),
