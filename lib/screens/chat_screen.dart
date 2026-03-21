@@ -1451,19 +1451,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     color: _isRecording ? Colors.red : Colors.blueAccent,
                     shape: BoxShape.circle,
                   ),
-                  child: _messageController.text.isEmpty && !_isRecording
-                    ? GestureDetector(
-                        onLongPress: _startRecording,
-                        onLongPressUp: _stopRecording,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Icon(Icons.mic, color: Colors.white),
-                        ),
-                      )
-                    : IconButton(
-                        icon: Icon(Icons.send, color: Colors.white),
-                        onPressed: _isRecording ? _stopRecording : _sendMessage,
-                      ),
+                  child: IconButton(
+                    icon: Icon(_isRecording ? Icons.send : (_messageController.text.isEmpty ? Icons.mic : Icons.send), color: Colors.white),
+                    onPressed: () {
+                      if (_isRecording) {
+                        _stopRecording();
+                      } else if (_messageController.text.isEmpty) {
+                        _startRecording();
+                      } else {
+                        _sendMessage();
+                      }
+                    },
+                  ),
                 ),
               ],
             ),

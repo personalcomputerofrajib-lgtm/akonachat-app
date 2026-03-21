@@ -440,22 +440,36 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 }
 
                 // Robust otherUser selection
-                final participants = chat['participants'] as List;
+                final List participants = chat['participants'] is List ? (chat['participants'] as List) : [];
                 final otherUser = participants.firstWhere(
-                  (p) => p['_id'].toString().toLowerCase().trim() != _currentUser?.id.toString().toLowerCase().trim(),
-                  orElse: () => participants.first,
+                  (p) => p is Map && p['_id'] != null && p['_id'].toString().toLowerCase().trim() != _currentUser?.id.toString().toLowerCase().trim(),
+                  orElse: () => participants.isNotEmpty ? participants.first : null,
                 );
 
+                if (otherUser == null) return SizedBox.shrink();
+
+                String lastMsgText = 'No messages yet';
+                if (lastMsg != null && lastMsg is Map) {
+                  lastMsgText = lastMsg['ciphertext']?.toString() ?? 'No messages yet';
+                }
+
+                String formattedTime = '';
+                if (chat['lastMessageAt'] != null) {
+                  try {
+                    formattedTime = _formatTime(DateTime.parse(chat['lastMessageAt'].toString()));
+                  } catch (e) {
+                    print('Date parse error: $e');
+                  }
+                }
+
                 return _buildChatTile(
-                  chatId: chat['_id'],
-                  name: otherUser['name'] ?? 'Unknown',
-                  message: lastMsg != null ? lastMsg['ciphertext'] : 'No messages yet',
-                  time: chat['lastMessageAt'] != null 
-                      ? _formatTime(DateTime.parse(chat['lastMessageAt'])) 
-                      : '', 
+                  chatId: chat['_id']?.toString() ?? '',
+                  name: otherUser['name']?.toString() ?? 'Unknown',
+                  message: lastMsgText,
+                  time: formattedTime,
                   unread: unreadCount,
-                  isOnline: otherUser['isOnline'] ?? false,
-                  profilePic: otherUser['profilePic'],
+                  isOnline: otherUser['isOnline'] == true,
+                  profilePic: otherUser['profilePic']?.toString(),
                 );
               },
             ),
