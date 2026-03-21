@@ -10,7 +10,7 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  final AuthService _authService = AuthService();
+  AuthService get _authService => AuthService();
 
   Future<http.Response> request(
     String method,

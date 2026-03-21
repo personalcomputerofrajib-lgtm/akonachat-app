@@ -7,13 +7,17 @@ import 'api_service.dart';
 import 'security_service.dart';
 
 class AuthService {
+  static final AuthService _instance = AuthService._internal();
+  factory AuthService() => _instance;
+  AuthService._internal();
+
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: Constants.androidClientId,
     serverClientId: Constants.webClientId,
     scopes: ['email', 'profile'],
   );
 
-  final ApiService _apiService = ApiService();
+  ApiService get _apiService => ApiService();
 
   /// Initiate Google Sign-In and authenticate with Backend
   /// Returns a map with 'user' (UserModel) and 'requiresUsername' (bool)
