@@ -62,6 +62,7 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final AuthService _authService = AuthService();
   bool _isLoading = true;
+  String? _initError;
   UserModel? _user;
 
   @override
@@ -71,14 +72,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   void _checkAuth() async {
+    setState(() {
+      _isLoading = true;
+      _initError = null;
+    });
+
     try {
-      final user = await _authService.loadUser();
+      print('🚀 Starting Auth & Security Initialization...');
+      final user = await _authService.loadUser().timeout(const Duration(seconds: 10));
       
       if (user != null) {
-        // Initialize Security and Database before letting user in
-        await SecurityService().initializeKeys();
-        // Trigger DB init early
-        await DatabaseService().database;
+        print('👤 User found: ${user.username}. Initializing Secure Systems...');
+        // Initialize Security and Database with timeout
+        await SecurityService().initializeKeys().timeout(const Duration(seconds: 20), onTimeout: () {
+          throw TimeoutException('Security initialization timed out. Check your connection.');
+        });
+        
+        print('🗄️ Initializing Database...');
+        await DatabaseService().database.timeout(const Duration(seconds: 15), onTimeout: () {
+          throw TimeoutException('Database initialization timed out.');
+        });
       }
 
       if (mounted) {
@@ -86,22 +99,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _user = user;
           _isLoading = false;
         });
+        print('✅ Initialization Complete.');
       }
     } catch (e) {
       print('❌ Initialization error: $e');
       if (mounted) {
         setState(() {
-          _user = null;
+          _initError = e.toString();
           _isLoading = false;
         });
-        // Show error dialog to user
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to initialize security systems: $e'),
-            backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 5),
-          ),
-        );
       }
     }
   }
@@ -111,7 +117,50 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_isLoading) {
       return Scaffold(
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 24),
+              Text('Starting AkonaChat...', style: TextStyle(color: Colors.grey)),
+              SizedBox(height: 8),
+              Text('Securing your connection...', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_initError != null) {
+      return Scaffold(
+        body: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+                SizedBox(height: 24),
+                Text('Initialization Failed', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                SizedBox(height: 12),
+                Text(_initError!, textAlign: TextAlign.center, style: TextStyle(color: Colors.grey[600])),
+                SizedBox(height: 32),
+                ElevatedButton(
+                  onPressed: _checkAuth,
+                  child: Text('Retry Connection'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _initError = null),
+                  child: Text('Cancel'),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }

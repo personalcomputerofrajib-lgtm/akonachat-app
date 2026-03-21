@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -8,7 +9,11 @@ import '../config/constants.dart';
 import 'auth_service.dart';
 
 class SecurityService {
-  final _storage = const FlutterSecureStorage();
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+    ),
+  );
   static DateTime? _lastCheckTime;
   
   // Storage Keys
@@ -25,8 +30,8 @@ class SecurityService {
     if (existingId == null) {
       await _generateAndUploadNewKeys();
     } else {
-      // Periodic check for replenishment
-      await checkAndReplenishPreKeys();
+      // Periodic check for replenishment - Run in background, don't block startup
+      unawaited(checkAndReplenishPreKeys());
     }
     
     // Generate DB key if missing
