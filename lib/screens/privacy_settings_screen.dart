@@ -47,7 +47,7 @@ class _PrivacySettingsScreenState extends State<PrivacySettingsScreen> {
     });
 
     try {
-      await _apiService.patch('/users/privacy', {key: value});
+      await _apiService.patch('/users/privacy', body: {key: value});
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to update settings'))

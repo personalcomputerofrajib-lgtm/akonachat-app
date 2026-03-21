@@ -38,7 +38,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
   Future<void> _unblockUser(String userId) async {
     try {
-      final response = await _apiService.post('/users/unblock', {'userId': userId});
+      final response = await _apiService.post('/users/unblock', body: {'userId': userId});
       if (response.statusCode == 200) {
         setState(() {
           _blockedUsers.removeWhere((user) => user['_id'] == userId);

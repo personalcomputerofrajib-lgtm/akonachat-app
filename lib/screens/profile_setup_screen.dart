@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import 'chat_list_screen.dart';
 
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/api_service.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
