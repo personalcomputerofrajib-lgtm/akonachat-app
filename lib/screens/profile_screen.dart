@@ -24,6 +24,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   final ImagePicker _picker = ImagePicker();
+  String _selectedBannerCategory = 'Gaming';
+
+  final Map<String, List<Map<String, String>>> _bannerCategories = {
+    'Gaming': [
+      {'name': 'PUBG', 'url': 'http://52.66.216.152:9000/static/pubg_banner.jpg'},
+      {'name': 'BGMI', 'url': 'http://52.66.216.152:9000/static/bgmi_banner.jpg'},
+      {'name': 'Free Fire', 'url': 'http://52.66.216.152:9000/static/free_fire_banner.jpg'},
+      {'name': 'COD', 'url': 'http://52.66.216.152:9000/static/call_of_duty.jpg'},
+    ],
+    'Naruto': List.generate(8, (i) => {
+      'name': 'Naruto ${i + 1}',
+      'url': 'http://52.66.216.152:9000/static/naruto/BANNER ${i + 1}${i == 0 ? ".PNG" : ".jpg"}'
+    }),
+    'Dragon Ball': List.generate(10, (i) => {
+      'name': 'DB ${i + 1}',
+      'url': 'http://52.66.216.152:9000/static/dragonball/BANNER ${i + 1} OF DRAGON BALL.jpg'
+    }),
+    'One Piece': List.generate(5, (i) => {
+      'name': 'OP ${i + 1}',
+      'url': 'http://52.66.216.152:9000/static/onepiece/BANNER ${i + 1} OF ONE PIECE.jpg'
+    }),
+  };
 
   @override
   void initState() {
@@ -308,20 +330,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Choose Your Gaming Banner',
+                'Choose Your Profile Banner',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 12),
+            // Category Selector
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: [
-                  _buildBannerOption('PUBG', 'http://52.66.216.152:9000/static/pubg_banner.jpg'),
-                  _buildBannerOption('BGMI', 'http://52.66.216.152:9000/static/bgmi_banner.jpg'),
-                  _buildBannerOption('Free Fire', 'http://52.66.216.152:9000/static/free_fire_banner.jpg'),
-                  _buildBannerOption('COD', 'http://52.66.216.152:9000/static/call_of_duty.jpg'),
-                ],
+                children: _bannerCategories.keys.map((cat) {
+                  bool isSelected = _selectedBannerCategory == cat;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(cat),
+                      selected: isSelected,
+                      onSelected: (val) {
+                        if (val) setState(() => _selectedBannerCategory = cat);
+                      },
+                      selectedColor: Colors.blueAccent.withOpacity(0.2),
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.blueAccent : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            SizedBox(height: 12),
+            // Banners Grid-like Scroll
+            Container(
+              height: 100,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _bannerCategories[_selectedBannerCategory]?.length ?? 0,
+                itemBuilder: (context, index) {
+                  final banner = _bannerCategories[_selectedBannerCategory]![index];
+                  // Important: Encode URL to handle spaces properly
+                  final encodedUrl = Uri.encodeFull(banner['url']!);
+                  return _buildBannerOption(banner['name']!, encodedUrl);
+                },
               ),
             ),
             SizedBox(height: 32),
