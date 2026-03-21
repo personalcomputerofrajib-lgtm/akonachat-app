@@ -22,20 +22,23 @@ class _GiftPickerSheetState extends State<GiftPickerSheet> {
   bool _isAnonymous = false;
 
   final List<Map<String, dynamic>> _gifts = [
-    {'id': 'rose', 'name': 'Rose', 'price': 10, 'icon': Icons.favorite, 'color': Colors.redAccent},
-    {'id': 'cake', 'name': 'Cake', 'price': 25, 'icon': Icons.cake, 'color': Colors.pinkAccent},
-    {'id': 'friendship_band', 'name': 'Friend Band', 'price': 50, 'icon': Icons.watch, 'color': Colors.purpleAccent},
-    {'id': 'car', 'name': 'Sports Car', 'price': 500, 'icon': Icons.directions_car, 'color': Colors.blueAccent},
-    {'id': 'gift_medal', 'name': 'Gold Medal', 'price': 200, 'isStatic': true, 'color': Colors.orangeAccent},
-    {'id': 'gift_diamond', 'name': 'Diamond', 'price': 500, 'isStatic': true, 'color': Colors.cyanAccent},
-    {'id': 'gift_watch', 'name': 'Luxury Watch', 'price': 1000, 'isStatic': true, 'color': Colors.amberAccent},
-    {'id': 'gift_jet', 'name': 'Private Jet', 'price': 2000, 'isStatic': true, 'color': Colors.blueGrey},
+    {'id': 'rose', 'name': 'Rose', 'price': 5, 'icon': Icons.favorite_border, 'color': Colors.redAccent},
+    {'id': 'heart', 'name': 'Heart', 'price': 10, 'icon': Icons.favorite, 'color': Colors.pinkAccent},
+    {'id': 'chocolate', 'name': 'Chocolate', 'price': 20, 'icon': Icons.wallet_giftcard, 'color': Colors.brown},
+    {'id': 'cake', 'name': 'Cake', 'price': 50, 'icon': Icons.cake, 'color': Colors.orangeAccent},
+    {'id': 'car', 'name': 'Sport Car', 'price': 200, 'icon': Icons.directions_car, 'color': Colors.blueAccent},
+    {'id': 'diamond', 'name': 'Diamond', 'price': 150, 'icon': Icons.diamond, 'color': Colors.cyanAccent},
+    {'id': 'rocket', 'name': 'Rocket', 'price': 1000, 'icon': Icons.rocket_launch, 'color': Colors.deepPurpleAccent},
   ];
 
   void _sendGift(String itemId, int price) async {
     setState(() => _isSending = true);
     
-    final result = await _authService.sendGift(widget.recipientId, itemId);
+    final result = await _authService.sendGift(
+      widget.recipientId, 
+      itemId, 
+      isAnonymous: _isAnonymous
+    );
     
     if (mounted) {
       setState(() => _isSending = false);

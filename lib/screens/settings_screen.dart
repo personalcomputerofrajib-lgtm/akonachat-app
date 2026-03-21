@@ -23,12 +23,16 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         children: [
           _buildSectionHeader('Appearance', isDark),
-          SwitchListTile(
-            title: Text('Dark Mode', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-            subtitle: Text('Toggle dark and light themes', style: TextStyle(color: Colors.grey)),
-            secondary: Icon(isDark ? Icons.dark_mode : Icons.light_mode, color: Colors.blueAccent),
-            value: isDark,
-            onChanged: (val) => themeService.toggleTheme(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildThemeCard(context, AppTheme.light, Icons.light_mode, 'Light'),
+                _buildThemeCard(context, AppTheme.dark, Icons.dark_mode, 'Dark'),
+                _buildThemeCard(context, AppTheme.cyber, Icons.bolt, 'Cyber'),
+              ],
+            ),
           ),
           Divider(),
           _buildSectionHeader('Notifications', isDark),
@@ -109,6 +113,56 @@ class SettingsScreen extends StatelessWidget {
           fontWeight: FontWeight.bold,
           color: Colors.blueAccent,
         ),
+      ),
+    );
+  }
+
+  Widget _buildThemeCard(BuildContext context, AppTheme theme, IconData icon, String label) {
+    final themeService = Provider.of<ThemeService>(context);
+    final bool isSelected = themeService.currentTheme == theme;
+    final bool isDark = themeService.isDarkMode;
+
+    return GestureDetector(
+      onTap: () => themeService.setTheme(theme),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isSelected 
+                ? (theme == AppTheme.cyber ? const Color(0xFF00E5FF).withOpacity(0.2) : Colors.blueAccent.withOpacity(0.1))
+                : (isDark ? Colors.grey[800] : Colors.white),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isSelected 
+                  ? (theme == AppTheme.cyber ? const Color(0xFF00E5FF) : Colors.blueAccent)
+                  : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: isSelected && theme == AppTheme.cyber 
+                ? [BoxShadow(color: const Color(0xFF00E5FF).withOpacity(0.5), blurRadius: 8)]
+                : null,
+            ),
+            child: Icon(
+              icon, 
+              color: isSelected 
+                ? (theme == AppTheme.cyber ? const Color(0xFF00E5FF) : Colors.blueAccent)
+                : Colors.grey,
+              size: 28,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label, 
+            style: TextStyle(
+              fontSize: 12, 
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              color: isSelected 
+                ? (theme == AppTheme.cyber ? const Color(0xFF00E5FF) : Colors.blueAccent)
+                : Colors.grey,
+            ),
+          ),
+        ],
       ),
     );
   }

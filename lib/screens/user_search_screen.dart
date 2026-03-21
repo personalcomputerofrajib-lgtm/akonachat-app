@@ -165,7 +165,14 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           icon: Icon(Icons.block, color: Colors.grey),
                           onPressed: () => _blockUser(user.id),
                         ),
-                        onTap: () => _startChat(user),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => UserDetailScreen(user: user),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),

@@ -133,11 +133,15 @@ class AuthService {
   }
 
   /// Send a sticker gift to someone
-  Future<Map<String, dynamic>?> sendGift(String recipientId, String itemId) async {
+  Future<Map<String, dynamic>?> sendGift(String recipientId, String itemId, {bool isAnonymous = false}) async {
     try {
       final response = await _apiService.post(
         '/engagement/send-gift',
-        body: {'recipientId': recipientId, 'itemId': itemId},
+        body: {
+          'recipientId': recipientId, 
+          'itemId': itemId,
+          'isAnonymous': isAnonymous,
+        },
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

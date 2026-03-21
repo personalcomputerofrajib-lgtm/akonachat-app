@@ -1,3 +1,4 @@
+```
 class UserModel {
   final String id;
   final String email;
@@ -12,6 +13,13 @@ class UserModel {
   final int streak;
   final List<dynamic>? gifts;
   final String? profileBanner;
+  final String? animeBanner;
+  final String? gameId;
+  final String? signature;
+  final List<dynamic>? guards;
+  final List<dynamic>? titles;
+  final int xp;
+  final int level;
 
   UserModel({
     required this.id,
@@ -27,6 +35,13 @@ class UserModel {
     this.streak = 0,
     this.gifts,
     this.profileBanner,
+    this.animeBanner,
+    this.gameId,
+    this.signature,
+    this.guards,
+    this.titles,
+    this.xp = 0,
+    this.level = 1,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -49,6 +64,12 @@ class UserModel {
       streak: json['streak'] ?? 0,
       gifts: json['gifts'] ?? [],
       profileBanner: json['profileBanner']?.toString(),
+      gameId: json['gameId']?.toString(),
+      signature: json['signature']?.toString(),
+      guards: json['guards'] ?? [],
+      titles: json['titles'] ?? [],
+      xp: json['xp'] ?? 0,
+      level: json['level'] ?? 1,
     );
   }
 
@@ -67,6 +88,13 @@ class UserModel {
       'streak': streak,
       'gifts': gifts,
       'profileBanner': profileBanner,
+      'animeBanner': animeBanner,
+      'gameId': gameId,
+      'signature': signature,
+      'guards': guards,
+      'titles': titles,
+      'xp': xp,
+      'level': level,
     };
   }
 }

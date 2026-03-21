@@ -19,6 +19,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
   final _aboutController = TextEditingController();
+  final _signatureController = TextEditingController();
+  final _gameIdController = TextEditingController();
   
   UserModel? _user;
   bool _isLoading = true;
@@ -61,6 +63,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _nameController.text = user.name;
         _usernameController.text = user.username ?? '';
         _aboutController.text = user.about ?? '';
+        _signatureController.text = user.signature ?? '';
+        _gameIdController.text = user.gameId ?? '';
       }
       _isLoading = false;
     });
@@ -110,6 +114,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         body: jsonEncode({
           'name': _nameController.text.trim(),
           'about': _aboutController.text.trim(),
+          'signature': _signatureController.text.trim(),
+          'gameId': _gameIdController.text.trim(),
         }),
       );
 
@@ -237,6 +243,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _pickBannerFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      if (image != null) {
+        await _uploadBanner(File(image.path));
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking banner: $e')));
+    }
+  }
+
+  Future<void> _uploadBanner(File file) async {
+    setState(() => _isSaving = true);
+    try {
+      final token = await _authService.getToken();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${Constants.apiUrl}/media/upload'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final imageUrl = data['url'];
+
+        // Update profile banner in backend
+        final updateResp = await http.patch(
+          Uri.parse('${Constants.apiUrl}/users/profile'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({'profileBanner': imageUrl}),
+        );
+
+        if (updateResp.statusCode == 200) {
+          final userData = jsonDecode(updateResp.body);
+          final updatedUser = UserModel.fromJson(userData);
+          await _authService.updateLocalUser(updatedUser);
+          setState(() => _user = updatedUser);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Custom banner updated!')));
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -326,13 +386,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 hintText: 'Tell us something about yourself...',
               ),
             ),
-            SizedBox(height: 32),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Choose Your Profile Banner',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            SizedBox(height: 24),
+            TextField(
+              controller: _gameIdController,
+              decoration: InputDecoration(
+                labelText: 'Game ID',
+                prefixIcon: Icon(Icons.games_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintText: 'Your Game ID (e.g. PUBG, Free Fire)',
               ),
+            ),
+            SizedBox(height: 24),
+            TextField(
+              controller: _signatureController,
+              decoration: InputDecoration(
+                labelText: 'Profile Signature',
+                prefixIcon: Icon(Icons.edit_note),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintText: 'A short sentence for your profile...',
+              ),
+            ),
+            SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Choose Your Profile Banner',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                TextButton.icon(
+                  onPressed: _pickBannerFromGallery,
+                  icon: Icon(Icons.add_photo_alternate),
+                  label: Text('Custom'),
+                ),
+              ],
             ),
             SizedBox(height: 12),
             // Category Selector

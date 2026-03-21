@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/message_queue.dart';
 import '../services/auth_service.dart';
+import '../widgets/custom_chat_bubble.dart';
+import '../widgets/glass_container.dart';
+import '../services/theme_service.dart';
+import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:uuid/uuid.dart';
@@ -10,7 +14,7 @@ import 'package:http/http.dart' as http;
 import '../config/constants.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'user_detail_screen.dart';
+import 'user_detail_screen.dart'; // Keep this import
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:record/record.dart';
@@ -68,6 +72,7 @@ class _ChatScreenState extends State<ChatScreen> {
   UserModel? _otherUser;
   
   Color _themeColor = Colors.blueAccent;
+  Color _chatBackgroundColor = Colors.white;
   String? _wallpaperUrl;
   final AudioPlayer _notificationPlayer = AudioPlayer();
 
@@ -130,6 +135,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 _themeColor = Color(int.parse(chatData['themeColor'].replaceAll('#', '0xFF')));
               } catch (e) {
                 _themeColor = Colors.blueAccent;
+              }
+            }
+            if (chatData['backgroundColor'] != null) {
+              try {
+                _chatBackgroundColor = Color(int.parse(chatData['backgroundColor'].replaceAll('#', '0xFF')));
+              } catch (e) {
+                _chatBackgroundColor = Colors.white;
               }
             }
             _wallpaperUrl = chatData['wallpaperUrl'];
@@ -875,12 +887,10 @@ class _ChatScreenState extends State<ChatScreen> {
             )
           : GestureDetector(
           onTap: () {
-            if (_otherUser != null) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => UserDetailScreen(user: _otherUser!)),
-              );
-            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => UserDetailScreen(userId: _otherUser?.id ?? (widget.chatId.contains('_') ? null : widget.chatId))),
+            );
           },
           child: Row(
             children: [
@@ -966,18 +976,15 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ],
           ),
-        ],
-      ),
+      backgroundColor: _chatBackgroundColor,
+      appBar: _buildAppBar(),
       body: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.grey[50],
-          image: _wallpaperUrl != null && _wallpaperUrl!.isNotEmpty
-            ? DecorationImage(
-                image: CachedNetworkImageProvider(_wallpaperUrl!),
-                fit: BoxFit.cover,
-                colorFilter: ColorFilter.mode(
-                  Colors.black.withOpacity(0.1),
-                  BlendMode.darken,
+        decoration: _wallpaperUrl != null && _wallpaperUrl!.isNotEmpty
+            ? BoxDecoration(
+                image: DecorationImage(
+                  image: CachedNetworkImageProvider(_wallpaperUrl!),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.1), BlendMode.darken),
                 ),
               )
             : null,
@@ -1085,14 +1092,60 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
             ListTile(
-              leading: Icon(Icons.image_outlined),
-              title: Text('Change Wallpaper'),
+              leading: Icon(Icons.color_lens_outlined),
+              title: Text('Change Background Color'),
               onTap: () {
                 Navigator.pop(context);
-                _pickWallpaper();
+                _pickBackgroundColor();
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _pickBackgroundColor() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select Background Color'),
+        content: SingleChildScrollView(
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              Colors.white,
+              Colors.grey[100]!,
+              Colors.blue[50]!,
+              Colors.pink[50]!,
+              Colors.green[50]!,
+              Colors.orange[50]!,
+              Colors.purple[50]!,
+              Colors.yellow[50]!,
+              const Color(0xFFE8F5E9),
+              const Color(0xFFFFFDE7),
+            ].map((color) => GestureDetector(
+              onTap: () {
+                Navigator.pop(context);
+                final hexColor = '#${color.value.toRadixString(16).substring(2).toUpperCase()}';
+                _socket!.emit('update_chat_settings', {
+                  'chatId': widget.chatId,
+                  'backgroundColor': hexColor
+                });
+                setState(() => _chatBackgroundColor = color);
+              },
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.grey[300]!),
+                ),
+              ),
+            )).toList(),
+          ),
         ),
       ),
     );
@@ -1152,7 +1205,9 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
-          GestureDetector(
+          final bool isCyber = Provider.of<ThemeService>(context).isCyberMode;
+          
+          return GestureDetector(
             onLongPress: () => _showOptions(msg, isMe),
             onTap: () {
               if (type == 'image' && mediaUrl != null) {
@@ -1161,18 +1216,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 ));
               }
             },
-            child: Container(
-              margin: EdgeInsets.only(bottom: 4, left: isMe ? 48 : 0, right: isMe ? 0 : 48),
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: isMe ? _themeColor : (Theme.of(context).brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[100]),
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  bottomLeft: Radius.circular(isMe ? 20 : 0),
-                  bottomRight: Radius.circular(isMe ? 0 : 20),
-                ),
-              ),
+            child: CustomChatBubble(
+              isMe: isMe,
+              gradient: isMe && isCyber 
+                ? const LinearGradient(colors: [Color(0xFF00E5FF), Color(0xFF6A1B9A)]) 
+                : null,
+              color: isMe 
+                ? (isCyber ? null : _themeColor) 
+                : (isCyber ? const Color(0xFF0A0E21).withOpacity(0.4) : (Theme.of(context).brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[100])),
+              showTail: true,
               child: Stack(
                 children: [
                    Column(
@@ -1220,13 +1272,13 @@ class _ChatScreenState extends State<ChatScreen> {
                             if (!isDeleted && !isDecryptionError)
                               Padding(
                                 padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
-                                child: Icon(Icons.lock, size: 12, color: isMe ? Colors.white70 : Colors.grey),
+                                child: Icon(Icons.lock, size: 12, color: isMe ? Colors.white70 : (isCyber ? Colors.cyan : Colors.grey)),
                               ),
                             Flexible(
                               child: Text(
                                 text,
                                 style: TextStyle(
-                                  color: isDecryptionError ? Colors.redAccent : (isMe ? Colors.white : Colors.black),
+                                  color: isDecryptionError ? Colors.redAccent : (isMe ? Colors.white : (isCyber ? Colors.white : Colors.black)),
                                   fontStyle: isDeleted || isDecryptionError ? FontStyle.italic : FontStyle.normal,
                                   fontSize: 16,
                                 ),
@@ -1234,11 +1286,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             ),
                           ],
                         ),
-                            if (isEdited && !isDeleted) ...[
-                              SizedBox(width: 4),
-                              Text('(edited)', style: TextStyle(color: isMe ? Colors.white70 : Colors.grey, fontSize: 10)),
-                            ],
-                            if (isMe) ...[
                               SizedBox(width: 4),
                               Icon(
                                 status == 'read' ? Icons.done_all : Icons.check,

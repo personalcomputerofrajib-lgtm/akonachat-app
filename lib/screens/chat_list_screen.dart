@@ -1,3 +1,4 @@
+```dart
 import 'package:flutter/material.dart';
 import '../services/cache_manager.dart';
 import 'dart:async';
@@ -6,6 +7,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
 import '../models/user_model.dart';
+import '../widgets/full_screen_image_viewer.dart';
+import '../widgets/daily_reward_popup.dart';
+import '../services/theme_service.dart';
+import 'user_detail_screen.dart';
+import 'package:provider/provider.dart';
 import 'login_screen.dart';
 import 'chat_screen.dart';
 import 'profile_screen.dart';
@@ -13,6 +19,8 @@ import 'user_search_screen.dart';
 import 'settings_screen.dart';
 import '../services/api_service.dart';
 import '../services/database_service.dart';
+import 'package:http/http.dart' as http;
+import '../utils/constants.dart';
 
 class ChatListScreen extends StatefulWidget {
   @override
@@ -124,18 +132,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
       await _loadLocalChats();
       
       // Then fetch from server
-      await _fetchChats();
-
+      await _loadChats();
+      _checkDailyReward();
+      
       // Listen for real-time updates
       socket?.on('receive_message', (data) {
         if (mounted) {
-          _fetchChats();
+          _loadChats();
         }
       });
 
       socket?.on('message_status', (data) {
         if (mounted) {
-          _fetchChats();
+          _loadChats();
         }
       });
 
@@ -221,6 +230,36 @@ class _ChatListScreenState extends State<ChatListScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _checkDailyReward() async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('${Constants.apiUrl}/engagement/status'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['canClaim'] == true) {
+          // Add a small delay so the app UI loads first
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) {
+              showDailyRewardPopup(
+                context, 
+                currentStreak: data['streak'], 
+                nextRewardDay: data['nextRewardDay']
+              );
+            }
+          });
+        }
+      }
+    } catch (e) {
+      print('Daily reward check error: $e');
+    }
   }
 
   Future<void> _loadLocalChats() async {
@@ -511,31 +550,52 @@ class _ChatListScreenState extends State<ChatListScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
         child: Row(
           children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                    backgroundImage: profilePic != null && profilePic.isNotEmpty ? CachedNetworkImageProvider(profilePic, cacheManager: CustomCacheManager.instance) : null,
-                  child: profilePic == null || profilePic.isEmpty 
-                    ? Text(name[0], style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 20))
-                    : null,
-                ),
-                if (isOnline)
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 14,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.greenAccent[400],
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
+            GestureDetector(
+              onTap: () {
+                // To get the other user's ID, we need to extract it from the chat object 
+                // but _buildChatTile doesn't have the full chat object.
+                // However, in 1-on-1 chats, the chatId is often the other user's ID or 
+                // contains it. Let's assume the caller will pass it or we'll refine.
+                // For now, let's navigate to the profile using the chatId if it's a userId.
+                if (!chatId.contains('_')) {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => UserDetailScreen(userId: chatId)
+                  ));
+                }
+              },
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                      backgroundImage: profilePic != null && profilePic.isNotEmpty ? CachedNetworkImageProvider(profilePic, cacheManager: CustomCacheManager.instance) : null,
+                    child: profilePic == null || profilePic.isEmpty 
+                      ? Text(name[0], style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 20))
+                      : null,
+                  ),
+                  if (isOnline)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00FF00), // Neon Green
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00FF00).withOpacity(0.5),
+                              blurRadius: 6,
+                              spreadRadius: 2,
+                            )
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             SizedBox(width: 16),
             Expanded(
