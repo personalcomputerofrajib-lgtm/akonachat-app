@@ -69,45 +69,56 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    // Use a small delay to ensure the context is ready for error display if needed
+    Future.delayed(Duration.zero, _checkAuth);
   }
 
   void _checkAuth() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
       _initError = null;
     });
 
     try {
-      print('🚀 Starting Auth & Security Initialization...');
-      final user = await _authService.loadUser().timeout(const Duration(seconds: 10));
+      print('🚀 Starting AkonaChat Secure Initialization...');
+      
+      // 1. Load User Cache (with timeout)
+      final user = await _authService.loadUser().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => throw TimeoutException('User data loading timed out.'),
+      );
       
       if (user != null) {
-        print('👤 User found: ${user.username}. Initializing Secure Systems...');
-        // Initialize Security and Database with timeout
-        await SecurityService().initializeKeys().timeout(const Duration(seconds: 20), onTimeout: () {
-          throw TimeoutException('Security initialization timed out. Check your connection.');
-        });
+        print('👤 User detected: ${user.username}. initializing secure protocols...');
         
-        print('🗄️ Initializing Database...');
-        await DatabaseService().database.timeout(const Duration(seconds: 15), onTimeout: () {
-          throw TimeoutException('Database initialization timed out.');
-        });
+        // 2. Initialize Signal Protocol Keys
+        await SecurityService().initializeKeys().timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => throw TimeoutException('Security Key handshake timed out.'),
+        );
+        
+        // 3. Initialize Local Encrypted Database
+        print('🗄️ Loading encrypted local database...');
+        await DatabaseService().database.timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => throw TimeoutException('Database decryption timed out.'),
+        );
 
-        // --- NEW: PHASE 2 ENGAGEMENT ---
-        // Claim daily reward in background
-        _authService.claimDailyReward().then((rewardData) {
+        // 4. Background: Daily Reward Claim (Non-blocking)
+        _authService.claimDailyReward().catchError((e) {
+          print('⚠️ Daily reward non-critical error: $e');
+          return null;
+        }).then((rewardData) {
           if (rewardData != null && mounted) {
-            final int reward = rewardData['reward'];
-            final int streak = rewardData['streak'];
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('🔥 $streak Day Streak! Claimed $reward Daily Coins!'),
-                backgroundColor: Colors.orangeAccent,
-                duration: const Duration(seconds: 4),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+             ScaffoldMessenger.of(context).showSnackBar(
+               SnackBar(
+                 content: Text('🔥 ${rewardData['streak']} Day Streak! +${rewardData['reward']} Coins!'),
+                 backgroundColor: Colors.orangeAccent,
+                 behavior: SnackBarBehavior.floating,
+               ),
+             );
           }
         });
       }
@@ -117,10 +128,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
           _user = user;
           _isLoading = false;
         });
-        print('✅ Initialization Complete.');
+        print('✅ All systems online.');
       }
     } catch (e) {
-      print('❌ Initialization error: $e');
+      print('❌ CRITICAL STARTUP ERROR: $e');
       if (mounted) {
         setState(() {
           _initError = e.toString();
