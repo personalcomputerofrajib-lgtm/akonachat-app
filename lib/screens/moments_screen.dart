@@ -110,35 +110,32 @@ class _MomentsScreenState extends State<MomentsScreen> {
     }
   }
 
-  void _showCreateMomentSheet() {
+  void _showCreateMomentOptions() {
     final textController = TextEditingController();
     File? selectedImage;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (BuildContext context, StateSetter setModalState) {
             return Container(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
-                top: 20,
-                left: 20,
-                right: 20,
+                left: 16,
+                right: 16,
+                top: 24,
               ),
               decoration: const BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('New Moment', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('Create New Moment', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
                   TextField(
                     controller: textController,
@@ -146,62 +143,28 @@ class _MomentsScreenState extends State<MomentsScreen> {
                     decoration: InputDecoration(
                       hintText: "What's on your mind?",
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      filled: true,
+                      fillColor: Colors.grey[100],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (selectedImage != null)
-                    Stack(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(selectedImage!, height: 150, width: double.infinity, fit: BoxFit.cover),
-                        ),
-                        Positioned(
-                          right: 8,
-                          top: 8,
-                          child: CircleAvatar(
-                            backgroundColor: Colors.black54,
-                            child: IconButton(
-                              icon: const Icon(Icons.close, color: Colors.white),
-                              onPressed: () => setModalState(() => selectedImage = null),
-                            ),
-                          ),
-                        ),
-                      ],
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        if (textController.text.trim().isEmpty) return;
+                        
+                        await _createMoment(textController.text, null);
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      ),
+                      child: const Text('Post Text Moment'),
                     ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.image, color: Colors.blue),
-                        onPressed: () async {
-                          final img = await _picker.pickImage(source: ImageSource.gallery);
-                          if (img != null) {
-                            setModalState(() => selectedImage = File(img.path));
-                          }
-                        },
-                      ),
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (textController.text.isEmpty && selectedImage == null) return;
-                          
-                          String? uploadedUrl;
-                          if (selectedImage != null) {
-                            uploadedUrl = await _uploadImage(selectedImage!);
-                          }
-                          
-                          await _createMoment(textController.text, uploadedUrl);
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                        child: const Text('Post'),
-                      ),
-                    ],
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -213,33 +176,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
     );
   }
 
-  Future<String?> _uploadImage(File file) async {
-    try {
-      final token = await _authService.getToken();
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('${Constants.apiUrl}/media/upload'),
-      );
-      request.headers['Authorization'] = 'Bearer $token';
-      request.files.add(await http.MultipartFile.fromPath('file', file.path));
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body)['url'];
-      } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed. Please check your connection.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ErrorSanitizer.sanitize(e))),
-      );
-    }
-    return null;
-  }
+  // Image uploading logic removed (Text-Only moments)
 
   @override
   Widget build(BuildContext context) {
@@ -268,9 +205,9 @@ class _MomentsScreenState extends State<MomentsScreen> {
               ),
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showCreateMomentSheet,
+        onPressed: _showCreateMomentOptions,
         backgroundColor: Colors.blueAccent,
-        child: const Icon(Icons.add_photo_alternate, color: Colors.white),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }

@@ -161,26 +161,30 @@ class ProfileDashboardBox extends StatelessWidget {
   }
 
   Widget _buildGiftsRow() {
-    final giftList = user.gifts ?? [];
-    if (giftList.isEmpty) {
+    final count = user.giftCount ?? 0;
+    if (count == 0) {
       return Text(
         'No gifts received yet. Send one to say hi!',
         style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
       );
     }
 
-    return SizedBox(
-      height: 50,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: giftList.length > 5 ? 5 : giftList.length,
-        itemBuilder: (context, index) {
-          final gift = giftList[index];
-          return Padding(
-            padding: const EdgeInsets.only(right: 12.0),
-            child: _getGiftIcon(gift['itemId']),
-          );
-        },
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.card_giftcard, color: Colors.pinkAccent, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            '$count Gifts Received',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

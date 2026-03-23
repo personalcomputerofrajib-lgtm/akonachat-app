@@ -55,9 +55,7 @@ class ApiService {
 
         // Handle 401 Unauthorized globally
         if (response.statusCode == 401) {
-          // Use a message bus or global state to trigger logout if needed
-          // For now, we'll just return it and let the caller handle it.
-          // In a real app, you'd trigger a logout event here.
+          await _authService.signOut();
         }
 
         // If success or non-retryable error, return

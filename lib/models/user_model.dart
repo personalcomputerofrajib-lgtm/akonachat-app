@@ -10,7 +10,7 @@ class UserModel {
   final DateTime? lastSeen;
   final int coins;
   final int streak;
-  final List<dynamic>? gifts;
+  final int? giftCount;
   final String? profileBanner;
   final String? animeBanner;
   final String? gameId;
@@ -32,7 +32,7 @@ class UserModel {
     this.lastSeen,
     this.coins = 0,
     this.streak = 0,
-    this.gifts,
+    this.giftCount,
     this.profileBanner,
     this.animeBanner,
     this.gameId,
@@ -61,7 +61,7 @@ class UserModel {
       lastSeen: json['lastSeen'] != null ? DateTime.tryParse(json['lastSeen'].toString()) : null,
       coins: json['coins'] ?? 0,
       streak: json['streak'] ?? 0,
-      gifts: json['gifts'] ?? [],
+      giftCount: json['giftCount'] ?? 0,
       profileBanner: json['profileBanner']?.toString(),
       gameId: json['gameId']?.toString(),
       signature: json['signature']?.toString(),
@@ -85,7 +85,7 @@ class UserModel {
       'lastSeen': lastSeen?.toIso8601String(),
       'coins': coins,
       'streak': streak,
-      'gifts': gifts,
+      'giftCount': giftCount,
       'profileBanner': profileBanner,
       'animeBanner': animeBanner,
       'gameId': gameId,

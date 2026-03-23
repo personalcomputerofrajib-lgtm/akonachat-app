@@ -289,9 +289,62 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
           _buildBFFSection(),
           const SizedBox(height: 24),
           _buildBUddYSection(),
+          const SizedBox(height: 24),
+          _buildMomentsSection(),
           const SizedBox(height: 32),
         ],
       ),
+    );
+  }
+
+  Widget _buildMomentsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Moments', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, color: Colors.grey),
+              onPressed: () {
+                // Navigate to full moments list
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Viewing all moments...')));
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_isLoadingMoments)
+          const Center(child: CircularProgressIndicator())
+        else if (_moments.isEmpty)
+          Container(
+            height: 80,
+            width: double.infinity,
+            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+            child: const Center(child: Text('No moments yet', style: TextStyle(color: Colors.grey))),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _moments.length > 3 ? 3 : _moments.length,
+            itemBuilder: (context, index) {
+              final m = _moments[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                ),
+                child: Text(m['text'] ?? '', style: const TextStyle(fontSize: 14)),
+              );
+            },
+          ),
+      ],
     );
   }
 
@@ -308,31 +361,38 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Gift Wall', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Icon(Icons.chevron_right, color: Colors.grey),
+            const Text('Gift Wall', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, color: Colors.grey),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Viewing Gift History...')));
+              },
+            ),
           ],
         ),
         const SizedBox(height: 12),
-        if (user.gifts == null || user.gifts!.isEmpty)
+        if (user.giftCount == null || user.giftCount == 0)
           Text('No gifts yet. Be the first to send one!', style: TextStyle(color: Colors.grey[400], fontSize: 13))
         else
-          SizedBox(
-            height: 60,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: user.gifts!.length,
-              itemBuilder: (context, i) => Container(
-                margin: EdgeInsets.only(right: i == 0 ? 0 : 8),
-                child: CircleAvatar(
-                  backgroundColor: Colors.pink.withOpacity(0.05),
-                  radius: 25,
-                  child: Icon(Icons.card_giftcard, color: Colors.pink[200]),
-                ),
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.pink.withOpacity(0.05),
+                radius: 25,
+                child: Icon(Icons.card_giftcard, color: Colors.pink[200]),
               ),
-            ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${user.giftCount} Gifts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('Total received', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                ],
+              )
+            ],
           ),
       ],
     );
@@ -356,11 +416,16 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('BFF', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Icon(Icons.chevron_right, color: Colors.grey),
+            const Text('BFF', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, color: Colors.grey),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Viewing BFF details...')));
+              },
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -391,11 +456,16 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('BUddY', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Icon(Icons.chevron_right, color: Colors.grey),
+            const Text('BUddY', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, color: Colors.grey),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Viewing all Buddies...')));
+              },
+            ),
           ],
         ),
         const SizedBox(height: 12),

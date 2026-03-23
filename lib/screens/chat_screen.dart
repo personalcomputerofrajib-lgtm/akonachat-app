@@ -15,6 +15,7 @@ import '../config/constants.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'user_detail_screen.dart'; // Keep this import
+import 'login_screen.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:record/record.dart';
@@ -150,6 +151,9 @@ class _ChatScreenState extends State<ChatScreen> {
             _wallpaperUrl = chatData['wallpaperUrl'];
           });
         }
+      } else if (response.statusCode == 401) {
+        _logout();
+        return;
       }
     } catch (e) {
       print('Error fetching chat details: $e');
@@ -390,6 +394,21 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
       _scrollToBottom();
+      _autoDownloadPendingMedia();
+    }
+  }
+
+  void _autoDownloadPendingMedia() {
+    for (var msg in _messages) {
+      final String msgId = msg['_id'] ?? msg['clientMsgId'] ?? '';
+      final String? mediaUrl = msg['mediaUrl'];
+      
+      if (mediaUrl != null && mediaUrl.isNotEmpty && msgId.isNotEmpty) {
+        if (!_localMediaPaths.containsKey(msgId) && !_downloadProgress.containsKey(msgId)) {
+          // Fire and forget auto-download
+          _downloadAndDecryptMedia(msg);
+        }
+      }
     }
   }
 
@@ -408,6 +427,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _audioRecorder.stop();
     }
     _audioRecorder.dispose();
+    _notificationPlayer.dispose();
     super.dispose();
   }
 
@@ -486,7 +506,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'ciphertext': text, // Keep plaintext for local display
         'clientMsgId': clientMsgId,
         'createdAt': DateTime.now().toIso8601String(),
-        'status': 'sent'
+        'status': 'pending'
       };
 
       setState(() {
@@ -632,7 +652,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'ciphertext': '[Voice Message]',
         'clientMsgId': clientMsgId,
         'createdAt': DateTime.now().toIso8601String(),
-        'status': 'sent'
+        'status': 'pending'
       };
 
       setState(() {
@@ -727,7 +747,7 @@ class _ChatScreenState extends State<ChatScreen> {
           'ciphertext': '[Image Message]', // Local display
           'clientMsgId': clientMsgId,
           'createdAt': DateTime.now().toIso8601String(),
-          'status': 'sent'
+          'status': 'pending'
         };
 
         setState(() {
@@ -746,6 +766,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
   
   void _showOptions(Map<String, dynamic> msg, bool isMe) {
+    final DateTime? createdAt = msg['createdAt'] != null ? DateTime.tryParse(msg['createdAt'].toString()) : null;
+    final bool isOlderThan24Hours = (createdAt != null) && DateTime.now().difference(createdAt).inHours > 24;
+
     showModalBottomSheet(
       context: context,
       builder: (context) => Column(
@@ -767,7 +790,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           Divider(),
-          if (isMe && !(msg['isDeletedEveryone'] == true))
+          if (isMe && !(msg['isDeletedEveryone'] == true) && !isOlderThan24Hours)
             ListTile(
               leading: Icon(Icons.edit, color: Colors.blue),
               title: Text('Edit Message'),
@@ -784,7 +807,7 @@ class _ChatScreenState extends State<ChatScreen> {
               _deleteMessage(msg['_id'], false);
             },
           ),
-          if (isMe && !(msg['isDeletedEveryone'] == true))
+          if (isMe && !(msg['isDeletedEveryone'] == true) && !isOlderThan24Hours)
             ListTile(
               leading: Icon(Icons.delete_forever, color: Colors.red),
               title: Text('Delete for Everyone'),
@@ -1318,6 +1341,17 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() => _downloadProgress.remove(msgId));
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to decrypt media')));
     }
+  }
+
+  Future<void> _logout() async {
+    SocketService().reset();
+    await AuthService().signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => LoginScreen()),
+      (route) => false,
+    );
   }
 
   Widget _buildMessageInput() {

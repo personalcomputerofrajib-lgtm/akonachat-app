@@ -32,11 +32,8 @@ class MessageQueue {
         // Emit via socket
         _socketService.socket?.emit('send_message', msg);
         
-        // Note: We don't mark as 'sent' here yet, we wait for the 
-        // socket acknowledgement or 'message_sent' event if the backend supports it.
-        // For simplicity in this fix, we'll mark it as sent as soon as emitted
-        // but a more robust way is to wait for ack.
-        await _db.updateMessageStatus(msg['clientMsgId'], 'sent');
+        // Let the 'receive_message' event update the local status to 'sent'
+        // once the backend has actually stored it. This prevents fake delivery statuses.
       }
     } catch (e) {
       print('Error processing message queue: $e');

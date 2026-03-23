@@ -160,6 +160,11 @@ class DatabaseService {
     await db.update('messages', {'status': status}, where: 'clientMsgId = ?', whereArgs: [clientMsgId]);
   }
 
+  Future<void> updateMessageLocalPath(String messageId, String localPath) async {
+    final db = await database;
+    await db.update('messages', {'localMediaOrdinal': localPath}, where: 'id = ? OR clientMsgId = ?', whereArgs: [messageId, messageId]);
+  }
+
   // --- Chat Methods ---
 
   Future<void> saveChat(Map<String, dynamic> chat) async {

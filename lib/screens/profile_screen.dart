@@ -339,11 +339,12 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F7FA), // Premium light background
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('My Profile'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        title: Text('My Profile', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.black87,
         elevation: 0,
         actions: [
           if (_isSaving)
@@ -358,9 +359,18 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
             )
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blueAccent.withOpacity(0.05), Colors.white],
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(top: kToolbarHeight + 20, bottom: 40),
+          child: Column(
+            children: [
             if (_user != null) ProfileDashboardBox(user: _user!, isCurrentUser: true),
             const SizedBox(height: 8),
             Stack(
@@ -368,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
                 CircleAvatar(
                   radius: 60,
                   backgroundImage: _user?.profilePic != null && _user!.profilePic.isNotEmpty
-                      ? CachedNetworkImageProvider(_user!.profilePic)
+                      ? CachedNetworkImageProvider("${_user!.profilePic}?t=${DateTime.now().millisecondsSinceEpoch}")
                       : null,
                   backgroundColor: Colors.grey[200],
                   child: (_user?.profilePic == null || _user!.profilePic.isEmpty)
@@ -390,71 +400,40 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
               ],
             ),
             SizedBox(height: 32),
-            TextField(
-              controller: _nameController,
-              decoration: InputDecoration(
-                labelText: 'Full Name',
-                prefixIcon: Icon(Icons.person_outline),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            SizedBox(height: 24),
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(
-                labelText: 'Username',
-                prefixIcon: Icon(Icons.alternate_email),
-                prefixText: '@',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hintText: 'e.g. rajib_123',
-                helperText: 'Unique handle, 5-10 characters [a-z0-9_]',
-              ),
-            ),
-            SizedBox(height: 24),
-            TextField(
-              controller: _aboutController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                labelText: 'About / Bio',
-                prefixIcon: Icon(Icons.info_outline),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hintText: 'Tell us something about yourself...',
-              ),
-            ),
-            SizedBox(height: 24),
-            TextField(
-              controller: _gameIdController,
-              decoration: InputDecoration(
-                labelText: 'Game ID',
-                prefixIcon: Icon(Icons.games_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hintText: 'Your Game ID (e.g. PUBG, Free Fire)',
-              ),
-            ),
-            SizedBox(height: 24),
-            TextField(
-              controller: _signatureController,
-              decoration: InputDecoration(
-                labelText: 'Profile Signature',
-                prefixIcon: Icon(Icons.edit_note),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                hintText: 'A short sentence for your profile...',
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Column(
+                children: [
+                  _buildPremiumTextField(_nameController, "Full Name", Icons.person_outline),
+                  SizedBox(height: 20),
+                  _buildPremiumTextField(_usernameController, "Username", Icons.alternate_email, hint: "e.g. rajib_123", helper: "5-10 chars [a-z0-9_]"),
+                  SizedBox(height: 20),
+                  _buildPremiumTextField(_aboutController, "About / Bio", Icons.info_outline, maxLines: 3, hint: "Tell us something about yourself..."),
+                  SizedBox(height: 20),
+                  _buildPremiumTextField(_gameIdController, "Game ID", Icons.games_outlined, hint: "Your Game ID (e.g. PUBG, Free Fire)"),
+                  SizedBox(height: 20),
+                  _buildPremiumTextField(_signatureController, "Profile Signature", Icons.edit_note, hint: "A short sentence for your profile..."),
+                ],
               ),
             ),
             SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Choose Your Profile Banner',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                TextButton.icon(
-                  onPressed: _pickBannerFromGallery,
-                  icon: Icon(Icons.add_photo_alternate),
-                  label: Text('Custom'),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Profile Banner', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  TextButton.icon(
+                    onPressed: _pickBannerFromGallery,
+                    icon: Icon(Icons.add_photo_alternate, color: Colors.blueAccent),
+                    label: Text('Custom', style: TextStyle(color: Colors.blueAccent)),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                  ),
+                ],
+              ),
             ),
             SizedBox(height: 12),
             // Category Selector
@@ -496,12 +475,63 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
                 },
               ),
             ),
-            SizedBox(height: 32),
-            Text(
-              'Email: ${_user?.email ?? ""}',
-              style: TextStyle(color: Colors.grey[600]),
+            SizedBox(height: 40),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              margin: EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: Offset(0, 5))],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.email_outlined, color: Colors.grey[400]),
+                  SizedBox(width: 12),
+                  Text('Email: ${_user?.email ?? ""}', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.w500)),
+                ],
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumTextField(TextEditingController controller, String label, IconData icon, {int maxLines = 1, String? hint, String? helper}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 15,
+            spreadRadius: 2,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        maxLines: maxLines,
+        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: TextStyle(color: Colors.grey[600], fontSize: 14),
+          prefixIcon: Icon(icon, color: Colors.blueAccent),
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+          helperText: helper,
+          helperStyle: TextStyle(color: Colors.grey[500]),
+          floatingLabelBehavior: FloatingLabelBehavior.auto,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: Colors.transparent,
+          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         ),
       ),
     );

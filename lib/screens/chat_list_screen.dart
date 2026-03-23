@@ -34,11 +34,35 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String? _errorMessage;
   UserModel? _currentUser;
   bool _isNavigating = false;
+  
+  int _currentPage = 1;
+  bool _hasMoreChats = true;
+  bool _isLoadingMore = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _initApp();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        if (_hasMoreChats && !_isLoadingMore) {
+          _loadChats(loadMore: true);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    final socket = SocketService().socket;
+    if (socket != null) {
+      socket.off('presence');
+      socket.off('receive_message');
+      socket.off('message_status');
+    }
+    super.dispose();
   }
 
   void _initApp() async {
@@ -255,6 +279,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
             }
           });
         }
+      } else if (response.statusCode == 401) {
+        _logout();
       }
     } catch (e) {
       print('Daily reward check error: $e');
@@ -413,8 +439,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
               ),
             )
           : ListView.builder(
-              itemCount: _chats.length,
+              controller: _scrollController,
+              itemCount: _chats.length + (_hasMoreChats ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _chats.length) {
+                  return Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+                }
                 final chat = _chats[index];
                 final lastMsg = chat['lastMessage'];
                 int unreadCount = 0;
@@ -619,19 +649,28 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  Future<void> _loadChats() async {
+  Future<void> _loadChats({bool loadMore = false}) async {
+    if (loadMore) {
+      if (!mounted) return;
+      setState(() => _isLoadingMore = true);
+    } else {
+      _currentPage = 1;
+    }
+
     try {
       final token = await _authService.getToken();
       if (token == null) return;
 
       final response = await http.get(
-        Uri.parse('${Constants.apiUrl}/chats'),
+        Uri.parse('${Constants.apiUrl}/chats?page=$_currentPage&limit=30'),
         headers: {'Authorization': 'Bearer $token'},
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> remoteChats = jsonDecode(response.body);
-        
+        final decoded = jsonDecode(response.body);
+        final List<dynamic> remoteChats = decoded['data'] ?? [];
+        final pagination = decoded['pagination'] ?? {};
+
         // Update local DB
         for (var chat in remoteChats) {
           await DatabaseService().saveChat(chat);
@@ -639,13 +678,27 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
         if (mounted) {
           setState(() {
-            _chats = remoteChats;
+            if (loadMore) {
+              _chats.addAll(remoteChats);
+            } else {
+              _chats = remoteChats;
+            }
+            
+            _currentPage++;
+            _hasMoreChats = _currentPage <= (pagination['totalPages'] ?? 1);
             _isLoading = false;
+            _isLoadingMore = false;
           });
         }
+      } else if (response.statusCode == 401) {
+        // Bug 3: Token Expiration (401) global handled logout
+        _logout();
+      } else {
+        if (mounted) setState(() => _isLoadingMore = false);
       }
     } catch (e) {
       print('Error loading remote chats: $e');
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 

@@ -57,14 +57,14 @@ class SocketService {
       // Connect with timeout
       final completer = Completer<bool>();
       
-      // Timeout after 5 seconds
-      final timeoutTimer = Timer(Duration(seconds: 5), () {
+      // Timeout after 15 seconds
+      final timeoutTimer = Timer(Duration(seconds: 15), () {
         if (!completer.isCompleted && !_timeoutOccurred) {
           _timeoutOccurred = true;
-          _connectionError = 'Socket connection timeout (5s)';
+          _connectionError = 'Socket connection timeout (15s)';
           _socket?.disconnect();
           completer.complete(false);
-          print('⏰ Socket connection timeout (5s)');
+          print('⏰ Socket connection timeout (15s)');
         }
       });
 
