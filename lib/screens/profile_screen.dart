@@ -495,8 +495,9 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildPremiumTextField(TextEditingController controller, String label, IconData icon, {int maxLines = 1, String? hint, String? helper}) {
     return Container(
