@@ -10,6 +10,7 @@ import '../models/user_model.dart';
 import 'package:intl/intl.dart';
 import '../widgets/glass_container.dart';
 import '../services/theme_service.dart';
+import '../services/error_sanitizer.dart';
 import 'package:provider/provider.dart';
 import 'user_detail_screen.dart';
 
@@ -50,9 +51,16 @@ class _MomentsScreenState extends State<MomentsScreen> {
           _moments = jsonDecode(response.body);
           _isLoading = false;
         });
+      } else {
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ErrorSanitizer.sanitize(e))),
+        );
+      }
     }
   }
 
@@ -220,9 +228,15 @@ class _MomentsScreenState extends State<MomentsScreen> {
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body)['url'];
+      } else {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed. Please check your connection.')),
+        );
       }
     } catch (e) {
-      print('Upload error: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorSanitizer.sanitize(e))),
+      );
     }
     return null;
   }
@@ -262,12 +276,15 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   Widget _buildMomentCard(Map<String, dynamic> moment) {
-    final user = moment['userId'];
-    final bool isLiked = (moment['likes'] as List).contains(_currentUser?.id);
-    final String timeStr = DateFormat('MMM d, h:mm a').format(DateTime.parse(moment['createdAt']));
+    final user = moment['userId'] is Map ? moment['userId'] : <String, dynamic>{};
+    final List likes = (moment['likes'] as List?) ?? [];
+    final bool isLiked = likes.any((l) => l.toString() == _currentUser?.id);
+    final String rawDate = moment['createdAt']?.toString() ?? '';
+    final String timeStr = rawDate.isNotEmpty
+        ? DateFormat('MMM d, h:mm a').format(DateTime.tryParse(rawDate) ?? DateTime.now())
+        : '';
 
-    final bool isCyber = Provider.of<ThemeService>(context).isCyberMode;
-    
+    final bool isCyber = Provider.of<ThemeService>(context, listen: false).isCyberMode;
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       child: GlassContainer(
@@ -340,7 +357,7 @@ class _MomentsScreenState extends State<MomentsScreen> {
               children: [
                 _buildActionButton(
                   icon: isLiked ? Icons.favorite : Icons.favorite_border,
-                  label: '${(moment['likes'] as List).length}',
+                  label: '${likes.length}',
                   color: isLiked ? Colors.redAccent : (isCyber ? Colors.white70 : Colors.grey),
                   onTap: () => _likeMoment(moment['_id']),
                 ),

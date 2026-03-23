@@ -38,16 +38,21 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
-    _fetchUserMoments();
-    _fetchGuards();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    await _fetchUserData();  // Must finish first
+    await _fetchGuards();   // Needs _user to be populated
+    _fetchUserMoments();    // Can run independently
   }
 
   Future<void> _fetchUserData() async {
+    if (mounted) setState(() => _isLoading = true);
     try {
       final token = await _authService.getToken();
       final url = widget.userId == null
-          ? '${Constants.apiUrl}/auth/profile'
+          ? '${Constants.apiUrl}/users/me'
           : '${Constants.apiUrl}/users/${widget.userId}';
 
       final response = await http.get(
@@ -56,17 +61,17 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
       );
 
       if (response.statusCode == 200) {
-        setState(() {
+        if (mounted) setState(() {
           _user = UserModel.fromJson(jsonDecode(response.body));
           _isLoading = false;
         });
       } else {
-        print('Failed to load user data: ${response.statusCode}');
-        setState(() => _isLoading = false);
+        print('Failed to load user data: ${response.statusCode} - ${response.body}');
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       print('Error fetching user data: $e');
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -102,15 +107,6 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
   }
 
   Future<void> _fetchGuards() async {
-    if (_user == null && widget.userId == null) {
-      // Wait for _user to be fetched if it's the current user's profile
-      // Or if userId is provided, use that directly.
-      // For now, we'll assume _user will be available or userId is provided.
-      // A more robust solution might involve chaining futures or using a FutureBuilder.
-      if (mounted) setState(() => _isLoadingGuards = false);
-      return;
-    }
-
     final String? targetUserId = widget.userId ?? _user?.id;
     if (targetUserId == null) {
       if (mounted) setState(() => _isLoadingGuards = false);
@@ -155,8 +151,26 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
 
     if (_user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('User Not Found')),
-        body: const Center(child: Text('Could not load user profile.')),
+        appBar: AppBar(title: const Text('Profile')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.person_off_outlined, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              const Text('Could not load profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('Check your connection and try again.', style: TextStyle(color: Colors.grey[600])),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _loadAll,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+        ),
       );
     }
 

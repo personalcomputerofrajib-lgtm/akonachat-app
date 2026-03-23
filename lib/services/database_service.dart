@@ -33,21 +33,33 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final String path = join(await getDatabasesPath(), 'akonachat_secure.db');
-    final String? dbKey = await SecurityService().getDatabaseKey();
+    String? dbKey = await SecurityService().getDatabaseKey();
     
-    if (dbKey == null) throw Exception('Database encryption key not initialized');
+    // OFFLINE FIX: If DB key not yet initialized (e.g., first offline start),
+    // generate and save a local-only key so the DB can still open for cached data.
+    if (dbKey == null) {
+      // Try to initialize security keys (may be offline, that's ok)
+      try {
+        await SecurityService().initializeKeys();
+        dbKey = await SecurityService().getDatabaseKey();
+      } catch (_) {}
+      // If still null, use a deterministic fallback (device-local)
+      if (dbKey == null) {
+        const fallback = 'AkonaChat_LocalFallback_Key_2024';
+        dbKey = fallback;
+        print('⚠️ Using fallback DB key (offline mode)');
+      }
+    }
 
     return await openDatabase(
       path,
       password: dbKey,
-      version: 2, // Upgraded version to add missing fields
+      version: 2,
       onCreate: (db, version) async {
         await _createTablesV2(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
-          // Simplest upgrade: drop and recreate if needed, or add columns
-          // Here we'll drop to ensure schema matches the new V2 exactly
           await db.execute('DROP TABLE IF EXISTS messages');
           await db.execute('DROP TABLE IF EXISTS chats');
           await _createTablesV2(db);
@@ -112,23 +124,29 @@ class DatabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getMessages(String chatId) async {
-    final db = await database;
-    final results = await db.query('messages', where: 'chatId = ?', whereArgs: [chatId], orderBy: 'createdAt DESC');
-    
-    // Convert status/boolean/json back for UI consumption
-    return results.map((m) {
-      final msg = Map<String, dynamic>.from(m);
-      if (msg['reactions'] != null) {
-        msg['reactions'] = jsonDecode(msg['reactions']);
-      }
-      msg['isEdited'] = msg['isEdited'] == 1;
-      msg['isDeletedEveryone'] = msg['isDeletedEveryone'] == 1;
-      if (msg['localMediaOrdinal'] != null) {
-        // Map back to mediaUrl if offline and we have a local path
-        // OR provide it as a separate field the UI checks
-      }
-      return msg;
-    }).toList();
+    try {
+      final db = await database;
+      final results = await db.query('messages',
+          where: 'chatId = ?', whereArgs: [chatId], orderBy: 'createdAt DESC');
+
+      return results.map((m) {
+        final msg = Map<String, dynamic>.from(m);
+        if (msg['reactions'] != null) {
+          try { msg['reactions'] = jsonDecode(msg['reactions']); } catch (_) {}
+        }
+        msg['isEdited'] = msg['isEdited'] == 1;
+        msg['isDeletedEveryone'] = msg['isDeletedEveryone'] == 1;
+        // CRITICAL FIX: Reconstruct senderId as a Map so ChatScreen can identify 'isMe'
+        // The DB stores senderId as a plain string; UI expects {'_id': '...'}
+        if (msg['senderId'] != null && msg['senderId'] is String) {
+          msg['senderId'] = {'_id': msg['senderId']};
+        }
+        return msg;
+      }).toList();
+    } catch (e) {
+      print('Error loading messages from DB: $e');
+      return [];
+    }
   }
 
   Future<List<Map<String, dynamic>>> getPendingMessages() async {

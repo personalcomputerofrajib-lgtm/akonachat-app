@@ -1,0 +1,60 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-apk:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Decode keystore to expected path
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > akonakey.jks
+        working-directory: akonachat
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: akonachat
+
+      - name: Build Release APK
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEYSTORE_FILE: akonakey.jks
+        run: flutter build apk --release --split-per-abi
+        working-directory: akonachat
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apks-${{ github.run_number }}
+          path: akonachat/build/app/outputs/flutter-apk/*.apk
+          retention-days: 30
+
+      - name: Build summary
+        run: |
+          echo "## ✅ APK Build #${{ github.run_number }} Successful" >> $GITHUB_STEP_SUMMARY
+          echo "Download APKs from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
+          echo "Run triggered by: ${{ github.actor }} on branch \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY

@@ -8,13 +8,14 @@ import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import '../widgets/profile_dashboard_box.dart';
+import '../services/error_sanitizer.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
   _ProfileScreenState createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
   final AuthService _authService = AuthService();
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
@@ -55,6 +56,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserData();
   }
 
+  /// Reload when the tab is tapped again or navigated back to
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh from backend every time this screen becomes active
+    _refreshFromBackend();
+  }
+
+  Future<void> _refreshFromBackend() async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null) return;
+      final response = await http.get(
+        Uri.parse('${Constants.apiUrl}/users/me'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200 && mounted) {
+        final updatedUser = UserModel.fromJson(jsonDecode(response.body));
+        await _authService.updateLocalUser(updatedUser);
+        setState(() {
+          _user = updatedUser;
+          _nameController.text = updatedUser.name;
+          _usernameController.text = updatedUser.username ?? '';
+          _aboutController.text = updatedUser.about ?? '';
+          _signatureController.text = updatedUser.signature ?? '';
+          _gameIdController.text = updatedUser.gameId ?? '';
+        });
+      }
+    } catch (e) {
+      // Silent fail — we already have cached data from _loadUserData()
+      print('Background refresh failed: $e');
+    }
+  }
+
   void _loadUserData() async {
     final user = await _authService.loadUser();
     setState(() {
@@ -92,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating banner: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorSanitizer.sanitize(e))));
     } finally {
       setState(() => _isSaving = false);
     }
@@ -168,7 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text(ErrorSanitizer.sanitize(e))),
       );
     } finally {
       setState(() => _isSaving = false);
@@ -233,11 +268,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: ${response.statusCode}')),
+          SnackBar(content: Text('Upload failed. Please check your connection.')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error uploading: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorSanitizer.sanitize(e))));
     } finally {
       setState(() => _isSaving = false);
     }
@@ -291,7 +326,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ErrorSanitizer.sanitize(e))));
     } finally {
       setState(() => _isSaving = false);
     }

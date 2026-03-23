@@ -441,9 +441,22 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
                 if (otherUser == null) return SizedBox.shrink();
 
-                String lastMsgText = 'No messages yet';
+                String lastMsgText = 'Tap to start chatting';
                 if (lastMsg != null && lastMsg is Map) {
-                  lastMsgText = lastMsg['ciphertext']?.toString() ?? 'No messages yet';
+                  final msgType = lastMsg['type']?.toString() ?? 'text';
+                  if (msgType == 'image') {
+                    lastMsgText = '📷 Image';
+                  } else if (msgType == 'voice') {
+                    lastMsgText = '🎤 Voice Message';
+                  } else {
+                    final raw = lastMsg['ciphertext']?.toString() ?? '';
+                    // If it looks like base64 encrypted content, show a placeholder
+                    if (raw.length > 100 && !raw.contains(' ')) {
+                      lastMsgText = '🔒 Encrypted message';
+                    } else {
+                      lastMsgText = raw.isEmpty ? 'Tap to start chatting' : raw;
+                    }
+                  }
                 }
 
                 String formattedTime = '';
@@ -505,18 +518,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         child: Row(
           children: [
             GestureDetector(
-              onTap: () {
-                // To get the other user's ID, we need to extract it from the chat object 
-                // but _buildChatTile doesn't have the full chat object.
-                // However, in 1-on-1 chats, the chatId is often the other user's ID or 
-                // contains it. Let's assume the caller will pass it or we'll refine.
-                // For now, let's navigate to the profile using the chatId if it's a userId.
-                if (!chatId.contains('_')) {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => UserDetailScreen(userId: chatId)
-                  ));
-                }
-              },
+              onTap: () {}, // Avatar tap disabled — chatId ≠ userId
               child: Stack(
                 children: [
                   CircleAvatar(

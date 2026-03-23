@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../services/auth_service.dart';
-import 'chat_list_screen.dart';
+import 'main_tabs_screen.dart';
 import 'username_setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -35,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
         } else {
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => ChatListScreen()),
+            MaterialPageRoute(builder: (context) => MainTabsScreen()),
           );
         }
       } else {

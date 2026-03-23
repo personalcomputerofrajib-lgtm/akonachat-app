@@ -19,6 +19,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
   final ApiService _apiService = ApiService();
   List<UserModel> _searchResults = [];
   bool _isLoading = false;
+  String? _startingChatForId; // prevents double-tap
 
   @override
   void dispose() {
@@ -35,7 +36,6 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Issue #136: Sanitize/Encode query
       final encodedQuery = Uri.encodeComponent(query);
       final response = await _apiService.get('/users/search?q=$encodedQuery');
 
@@ -52,8 +52,9 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
     }
   }
 
-  void _startChat(UserModel otherUser) async {
-    setState(() => _isLoading = true);
+  Future<void> _startChat(UserModel otherUser) async {
+    if (_startingChatForId == otherUser.id) return;
+    setState(() => _startingChatForId = otherUser.id);
     try {
       final response = await _apiService.post(
         '/chats/private',
@@ -63,7 +64,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
       if (response.statusCode == 200) {
         final chatData = jsonDecode(response.body);
         final String chatId = chatData['_id'];
-        
+
         if (!mounted) return;
         Navigator.push(
           context,
@@ -74,11 +75,22 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
             ),
           ),
         );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not start chat. Please try again.')),
+          );
+        }
       }
     } catch (e) {
       print('Chat creation error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _startingChatForId = null);
     }
   }
 
@@ -101,6 +113,95 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  /// Shows a bottom sheet with actions when a user result is tapped
+  void _showUserActions(UserModel user) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40, height: 4,
+              margin: EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+            ),
+            // User header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundImage: user.profilePic.isNotEmpty
+                        ? CachedNetworkImageProvider(user.profilePic, cacheManager: CustomCacheManager.instance)
+                        : null,
+                    backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                    child: user.profilePic.isEmpty ? Icon(Icons.person, color: Colors.blueAccent) : null,
+                  ),
+                  SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(user.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('@${user.username ?? "user"}', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Divider(),
+            // Message action
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.blueAccent,
+                child: Icon(Icons.chat_bubble_outline, color: Colors.white, size: 20),
+              ),
+              title: Text('Message', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text('Start a conversation'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _startChat(user);
+              },
+            ),
+            // View profile action
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.grey[200],
+                child: Icon(Icons.person_outline, color: Colors.black87, size: 20),
+              ),
+              title: Text('View Profile', style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text('See their full profile'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => UserDetailScreen(userId: user.id)),
+                );
+              },
+            ),
+            // Block action
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.red.withOpacity(0.1),
+                child: Icon(Icons.block, color: Colors.red, size: 20),
+              ),
+              title: Text('Block User', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
+              subtitle: Text('Remove from search results'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _blockUser(user.id);
+              },
+            ),
+            SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -141,9 +242,12 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                     itemCount: _searchResults.length,
                     itemBuilder: (context, index) {
                       final user = _searchResults[index];
+                      final bool isStarting = _startingChatForId == user.id;
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: user.profilePic.isNotEmpty ? CachedNetworkImageProvider(user.profilePic, cacheManager: CustomCacheManager.instance) : null,
+                          backgroundImage: user.profilePic.isNotEmpty
+                              ? CachedNetworkImageProvider(user.profilePic, cacheManager: CustomCacheManager.instance)
+                              : null,
                           backgroundColor: Colors.blueAccent.withOpacity(0.1),
                           child: user.profilePic.isEmpty ? Icon(Icons.person, color: Colors.blueAccent) : null,
                         ),
@@ -162,18 +266,14 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                           ],
                         ),
                         isThreeLine: user.about != null && user.about!.isNotEmpty,
-                        trailing: IconButton(
-                          icon: Icon(Icons.block, color: Colors.grey),
-                          onPressed: () => _blockUser(user.id),
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => UserDetailScreen(userId: user.id),
-                            ),
-                          );
-                        },
+                        trailing: isStarting
+                            ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                            : IconButton(
+                                icon: Icon(Icons.chat_bubble_outline, color: Colors.blueAccent),
+                                tooltip: 'Message',
+                                onPressed: () => _startChat(user),
+                              ),
+                        onTap: () => _showUserActions(user),
                       );
                     },
                   ),

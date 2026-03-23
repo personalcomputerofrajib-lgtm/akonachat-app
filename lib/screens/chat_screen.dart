@@ -29,6 +29,7 @@ import '../services/encryption_service.dart';
 import '../services/security_service.dart';
 import '../services/database_service.dart';
 import '../services/socket_service.dart';
+import '../services/error_sanitizer.dart';
 import '../widgets/full_screen_image_viewer.dart';
 // Remove redundant import to fix conflict with user_detail_screen.dart
 
@@ -50,6 +51,8 @@ class _ChatScreenState extends State<ChatScreen> {
   UserModel? _currentUser;
   final Uuid _uuid = Uuid();
 
+  // ValueNotifier for the send/mic icon — avoids rebuilding the full message list on every keystroke
+  final ValueNotifier<bool> _hasTextNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<bool> _isOtherUserTypingNotifier = ValueNotifier<bool>(false);
   bool _isMeTyping = false;
   DateTime? _lastTypingTime;
@@ -88,8 +91,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _onTextChanged() {
-    // Force a rebuild to toggle between Mic and Send icons
-    if (mounted) setState(() {});
+    // Update ValueNotifier only — does NOT rebuild the full message list
+    _hasTextNotifier.value = _messageController.text.isNotEmpty;
 
     if (_socket == null) return;
     
@@ -395,11 +398,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.removeListener(_onTextChanged);
     _messageController.dispose();
     _scrollController.dispose();
-    // Issue #143: Cleanup socket listeners
+    _hasTextNotifier.dispose();
+    // Cleanup socket listeners
     _socket?.off('receive_message');
     _socket?.off('message_deleted_everyone');
     _socket?.off('message_status');
-    // Issue #147: Stop and dispose recorder
+    // Stop and dispose recorder
     if (_isRecording) {
       _audioRecorder.stop();
     }
@@ -494,9 +498,21 @@ class _ChatScreenState extends State<ChatScreen> {
       await DatabaseService().saveMessage(msg);
     } catch (e) {
       print('Encryption Error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Security Error: $e'))
-      );
+      final isNoKey = e.toString().contains('no security keys') || e.toString().contains('security key');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isNoKey
+                ? 'This user hasn\'t set up encryption yet. Ask them to open the app.'
+                : 'Secure send failed. Tap \'Reset Secure Session\' in the menu to fix.'),
+            action: isNoKey ? null : SnackBarAction(
+              label: 'Reset',
+              onPressed: _resetSecureSession,
+            ),
+            duration: Duration(seconds: 5),
+          )
+        );
+      }
     }
   }
 
@@ -1387,22 +1403,28 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                 ),
                 SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: _isRecording ? Colors.red : Colors.blueAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: Icon(_isRecording ? Icons.send : (_messageController.text.isEmpty ? Icons.mic : Icons.send), color: Colors.white),
-                    onPressed: () {
-                      if (_isRecording) {
-                        _stopRecording();
-                      } else if (_messageController.text.isEmpty) {
-                        _startRecording();
-                      } else {
-                        _sendMessage();
-                      }
-                    },
+                ValueListenableBuilder<bool>(
+                  valueListenable: _hasTextNotifier,
+                  builder: (context, hasText, _) => Container(
+                    decoration: BoxDecoration(
+                      color: _isRecording ? Colors.red : Colors.blueAccent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        _isRecording ? Icons.send : (hasText ? Icons.send : Icons.mic),
+                        color: Colors.white,
+                      ),
+                      onPressed: () {
+                        if (_isRecording) {
+                          _stopRecording();
+                        } else if (!hasText) {
+                          _startRecording();
+                        } else {
+                          _sendMessage();
+                        }
+                      },
+                    ),
                   ),
                 ),
               ],
