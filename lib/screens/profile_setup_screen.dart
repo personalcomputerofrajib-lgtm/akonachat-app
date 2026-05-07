@@ -9,6 +9,7 @@ import '../config/constants.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import 'chat_list_screen.dart';
+import 'main_tabs_screen.dart';
 
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -178,10 +179,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         final updatedUser = UserModel.fromJson(data);
         await _authService.updateLocalUser(updatedUser);
 
-        // Success - Go to Chat List
+        // Success - Go to Main Tabs (has full bottom navigation)
+        // FIX Bug 11: was navigating to ChatListScreen, bypassing bottom nav
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => ChatListScreen()),
+          MaterialPageRoute(builder: (context) => MainTabsScreen()),
         );
       } else {
         final data = jsonDecode(response.body);

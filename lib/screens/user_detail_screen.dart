@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import '../models/user_model.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
+import '../config/constants.dart';
+import '../models/user_model.dart';
+import '../services/auth_service.dart';
+import '../services/api_service.dart';
+import '../services/theme_service.dart';
 import '../widgets/full_screen_image_viewer.dart';
 import '../widgets/profile_dashboard_box.dart';
 import '../widgets/gift_picker_sheet.dart';
-
-import '../services/auth_service.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-import '../config/constants.dart';
 import '../widgets/glass_container.dart';
-import '../services/theme_service.dart';
-import 'package:provider/provider.dart';
+import 'chat_screen.dart';
+import 'main_tabs_screen.dart';
 
 class UserDetailScreen extends StatefulWidget {
   final String? userId; // If null, show current user
@@ -271,7 +273,15 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Text(user.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text(
+            user.name,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              // FIX Bug 18: Use theme-aware color instead of hardcoded white
+              color: isCyber ? Colors.white : Colors.black87,
+            ),
+          ),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -575,10 +585,50 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
     );
   }
 
+  /// FIX Bug 12: Implement _startChat by calling POST /chats/private to find
+  /// or create a private chat with this user, then navigate to ChatScreen.
   void _startChat(BuildContext context) async {
-    // Reuse logic or navigate - for now just POP and let user decide if they came from chat or search
-    // Actually, common pattern is to find or create a chat
-    // I'll leave this to be implemented with real logic in the next step
+    if (widget.userId == null) return; // Can't start chat with yourself via this screen
+
+    try {
+      final token = await _authService.getToken();
+      final response = await http.post(
+        Uri.parse('${Constants.apiUrl}/chats/private'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer \$token',
+        },
+        body: jsonEncode({'participantId': widget.userId}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        final chatId = data['_id'] as String;
+        if (context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatScreen(
+                chatId: chatId,
+                chatName: _user?.name ?? 'Chat',
+              ),
+            ),
+          );
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not start chat. Please try again.')),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error starting chat: \$e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Network error. Please try again.')),
+        );
+      }
+    }
   }
 }
-

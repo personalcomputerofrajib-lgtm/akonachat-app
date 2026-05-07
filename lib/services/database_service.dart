@@ -165,6 +165,19 @@ class DatabaseService {
     await db.update('messages', {'localMediaOrdinal': localPath}, where: 'id = ? OR clientMsgId = ?', whereArgs: [messageId, messageId]);
   }
 
+  /// FIX Bug 13: Permanently remove a message from local storage.
+  /// Called when the server emits 'message_deleted_me' so the deletion
+  /// persists across app restarts instead of the message reappearing.
+  Future<void> deleteMessage(String messageId) async {
+    if (messageId.isEmpty) return;
+    final db = await database;
+    await db.delete(
+      'messages',
+      where: 'id = ? OR clientMsgId = ?',
+      whereArgs: [messageId, messageId],
+    );
+  }
+
   // --- Chat Methods ---
 
   Future<void> saveChat(Map<String, dynamic> chat) async {

@@ -5,6 +5,7 @@ import '../config/constants.dart';
 import '../models/user_model.dart';
 import 'api_service.dart';
 import 'security_service.dart';
+import 'session_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -95,6 +96,8 @@ class AuthService {
 
   /// Sign out
   Future<void> signOut() async {
+    // FIX Bug 19: Reset session service to clear cached store for the next user
+    SessionService().reset();
     await _googleSignIn.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(Constants.tokenKey);

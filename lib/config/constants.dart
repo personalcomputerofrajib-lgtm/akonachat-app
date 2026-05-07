@@ -1,8 +1,11 @@
 class Constants {
-  // Production AWS Server:
-  static const String serverUrl = 'http://52.66.216.152:9000';
-  // Local Testing: 'http://localhost:9000'
-  static const String apiUrl = 'http://52.66.216.152:9000/api';
+  // Local PC Backend (for testing):
+  static const String serverUrl = 'http://192.168.0.142:9000';
+  static const String apiUrl = 'http://192.168.0.142:9000/api';
+
+  // Production AWS Server (uncomment to deploy):
+  // static const String serverUrl = 'http://52.66.216.152:9000';
+  // static const String apiUrl = 'http://52.66.216.152:9000/api';
   
   // Google Client IDs
   static const String webClientId = 

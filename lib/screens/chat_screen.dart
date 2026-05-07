@@ -304,35 +304,79 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
+      // FIX Bug 13: Persist "deleted for me" to local DB so it survives app restart
       _socket!.on('message_deleted_me', (data) {
         if (mounted && data['chatId'] == widget.chatId) {
+          final msgId = data['msgId'];
           setState(() {
-            _messages.removeWhere((m) => m['_id'] == data['msgId']);
+            _messages.removeWhere((m) => m['_id'] == msgId);
           });
+          // Mark deleted in local DB by saving a tombstone flag
+          DatabaseService().deleteMessage(msgId);
         }
       });
 
-      _socket!.on('message_edited', (data) {
+      // FIX Bug 14: Persist edited message to local DB
+      _socket!.on('message_edited', (data) async {
         if (mounted && data['chatId'] == widget.chatId) {
+          final String msgId = data['msgId'];
+          final String? signalType = data['signalType'];
+          String decryptedText = data['newText'];
+
+          // Decrypt if it's from the other user and encrypted
+          if (signalType != null && _otherUser != null) {
+            // Find the original message to check sender
+            final msgIndex = _messages.indexWhere((m) => m['_id'] == msgId);
+            if (msgIndex != -1) {
+              final dynamic senderIdRaw = _messages[msgIndex]['senderId'];
+              String msgSenderId = '';
+              if (senderIdRaw is Map) {
+                msgSenderId = (senderIdRaw['_id'] ?? senderIdRaw['id'] ?? '').toString();
+              } else {
+                msgSenderId = senderIdRaw.toString();
+              }
+
+              if (msgSenderId != _currentUser?.id) {
+                try {
+                  decryptedText = await _sessionService.decryptMessage(
+                    msgSenderId, 
+                    {'body': data['newText'], 'type': signalType}
+                  );
+                } catch (e) {
+                  print('Error decrypting edit: $e');
+                  decryptedText = '[Error decrypting edit]';
+                }
+              }
+            }
+          }
+
           setState(() {
-            final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
+            final index = _messages.indexWhere((m) => m['_id'] == msgId);
             if (index != -1) {
-              _messages[index]['ciphertext'] = data['newText'];
+              _messages[index]['ciphertext'] = decryptedText;
               _messages[index]['isEdited'] = true;
+              if (signalType != null) _messages[index]['signalType'] = signalType;
+              DatabaseService().saveMessage(_messages[index]);
             }
           });
         }
       });
 
+      // FIX Bug 5: Keep both the plain bool (_isOtherUserTyping) AND the
+      // ValueNotifier in sync so the typing indicator in the input bar updates.
       _socket!.on('user_typing', (data) {
         if (mounted && data['chatId'] == widget.chatId) {
-          setState(() => _isOtherUserTyping = true);
+          _isOtherUserTyping = true;
+          _isOtherUserTypingNotifier.value = true;
+          setState(() {});
         }
       });
 
       _socket!.on('user_stop_typing', (data) {
         if (mounted && data['chatId'] == widget.chatId) {
-          setState(() => _isOtherUserTyping = false);
+          _isOtherUserTyping = false;
+          _isOtherUserTypingNotifier.value = false;
+          setState(() {});
         }
       });
 
@@ -418,10 +462,24 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _hasTextNotifier.dispose();
-    // Cleanup socket listeners
+    // FIX Bug 9: Dispose the typing ValueNotifier
+    _isOtherUserTypingNotifier.dispose();
+    // FIX Bug 16: Dispose the search controller
+    _searchController.dispose();
+    // FIX Bug 6: Remove ALL socket listeners to prevent memory leaks
+    // and setState-after-dispose crashes
     _socket?.off('receive_message');
-    _socket?.off('message_deleted_everyone');
+    _socket?.off('sync_messages');
     _socket?.off('message_status');
+    _socket?.off('message_deleted_everyone');
+    _socket?.off('message_deleted_me');
+    _socket?.off('message_edited');
+    _socket?.off('user_typing');
+    _socket?.off('user_stop_typing');
+    _socket?.off('message_reaction_updated');
+    _socket?.off('chat_settings_updated');
+    _socket?.off('presence');
+    _socket?.off('connect');
     // Stop and dispose recorder
     if (_isRecording) {
       _audioRecorder.stop();
@@ -880,9 +938,31 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _editMessage(String? msgId, String newText) {
-    if (msgId == null || _socket == null) return;
-    _socket!.emit('edit_message', {'msgId': msgId, 'newText': newText});
+  /// FIX Bug 17: Encrypt message edits so plaintext never touches the wire.
+  void _editMessage(String? msgId, String newText) async {
+    if (msgId == null || _socket == null || _otherUser == null) return;
+    
+    try {
+      final encryptedBody = await _sessionService.encryptMessage(_otherUser!.id, newText);
+      _socket!.emit('edit_message', {
+        'msgId': msgId, 
+        'newText': encryptedBody['body'],
+        'signalType': encryptedBody['type'],
+      });
+      
+      // Update locally immediately for better UX
+      final index = _messages.indexWhere((m) => m['_id'] == msgId);
+      if (index != -1) {
+        setState(() {
+          _messages[index]['ciphertext'] = newText;
+          _messages[index]['isEdited'] = true;
+          _messages[index]['signalType'] = encryptedBody['type'];
+        });
+        DatabaseService().saveMessage(_messages[index]);
+      }
+    } catch (e) {
+      print('Error encrypting edit: $e');
+    }
   }
 
   void _scrollToBottom() {
@@ -924,20 +1004,25 @@ class _ChatScreenState extends State<ChatScreen> {
             : null,
         child: Column(
           children: [
-            // Filter messages based on search query
-            // This logic is moved outside the ListView.builder to avoid re-calculating on every item build
-            Expanded(
+            // FIX Bug 10: Pre-compute the filtered list ONCE outside the builder.
+            // Previously this was O(N²) — recalculated for every single item.
+            Builder(builder: (context) {
+              final List<Map<String, dynamic>> filteredMessages =
+                  _isSearching && _searchQuery.isNotEmpty
+                      ? _messages
+                          .where((m) => (m['ciphertext'] ?? '')
+                              .toString()
+                              .toLowerCase()
+                              .contains(_searchQuery))
+                          .toList()
+                      : _messages;
+              return Expanded(
               child: ListView.builder(
                 controller: _scrollController,
                 reverse: true,
                 padding: EdgeInsets.all(16),
-                itemCount: _isSearching && _searchQuery.isNotEmpty
-                  ? _messages.where((m) => (m['ciphertext'] ?? '').toString().toLowerCase().contains(_searchQuery)).length
-                  : _messages.length,
+                itemCount: filteredMessages.length,
                 itemBuilder: (context, index) {
-                  final filteredMessages = _isSearching && _searchQuery.isNotEmpty
-                    ? _messages.where((m) => (m['ciphertext'] ?? '').toString().toLowerCase().contains(_searchQuery)).toList()
-                    : _messages;
                   
                   final msg = filteredMessages[index];
                   final String currentUserId = _currentUser?.id ?? '';
@@ -967,7 +1052,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 },
               ),
-            ),
+              );  // closes return Expanded(
+            }), // closes Builder(
             _buildMessageInput(),
           ],
         ),
