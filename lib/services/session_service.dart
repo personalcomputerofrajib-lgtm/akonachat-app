@@ -6,25 +6,46 @@ import 'signal_store.dart';
 import 'auth_service.dart';
 
 class SessionService {
+  static final SessionService _instance = SessionService._internal();
+  factory SessionService() => _instance;
+  SessionService._internal();
+
   final _security = SecurityService();
 
-  // FIX Bug 19: Store is now created with the current user's ID so all
-  // session/prekey/identity keys are isolated per account on this device.
+  // FIX: Store is namespaced per userId. The _userId is set synchronously
+  // on login so no async race condition can cause the wrong store to be used.
   PersistentSignalStore? _store;
+  String? _currentUserId;
+
+  /// Call this immediately on login BEFORE any encryption — sets up the
+  /// correct user-scoped store synchronously so there is zero risk of the
+  /// old account's store being used.
+  Future<void> initForUser(String userId) async {
+    if (_currentUserId != userId || _store == null) {
+      _store = null; // Clear old store first
+      _currentUserId = userId;
+      _store = PersistentSignalStore(userId);
+      print('✅ SessionService initialized for user: $userId');
+    }
+  }
 
   /// Lazily initialise the store once we know the current user's ID.
   Future<PersistentSignalStore> _getStore() async {
-    if (_store != null) return _store!;
+    if (_store != null && _currentUserId != null) return _store!;
     final user = await AuthService().loadUser();
     if (user == null) throw Exception('SessionService: no authenticated user');
-    _store = PersistentSignalStore(user.id);
+    if (_currentUserId != user.id || _store == null) {
+      _currentUserId = user.id;
+      _store = PersistentSignalStore(user.id);
+    }
     return _store!;
   }
 
-  /// Invalidate the cached store — call this on logout so the next login
-  /// picks up the correct user-scoped store.
+  /// Invalidate the cached store — call this on logout.
   void reset() {
     _store = null;
+    _currentUserId = null;
+    print('🔄 SessionService reset — store cleared');
   }
 
   /// Start a secure session with a recipient if one doesn't exist.
@@ -32,24 +53,18 @@ class SessionService {
     final store   = await _getStore();
     final address = SignalProtocolAddress(recipientUserId, 1);
 
-    // 1. Check if session already exists
     if (!await store.containsSession(address)) {
-      // 2. Fetch bundle from Backend
       PreKeyBundle? bundle = await _security.fetchRecipientBundle(recipientUserId);
 
-      // If bundle not found, ensure our own keys are uploaded first, then retry once
       if (bundle == null) {
-        try {
-          await _security.initializeKeys();
-        } catch (_) {}
+        try { await _security.initializeKeys(); } catch (_) {}
         bundle = await _security.fetchRecipientBundle(recipientUserId);
       }
 
       if (bundle == null) {
-        throw Exception('Recipient has no security keys. Ask them to open the app.');
+        throw Exception('no security keys — ask recipient to open the app');
       }
 
-      // 3. Initialize Session locally (X3DH handshake)
       final sessionBuilder = SessionBuilder(store, store, store, store, address);
       await sessionBuilder.processPreKeyBundle(bundle);
     }
@@ -62,34 +77,27 @@ class SessionService {
     try {
       final cipher     = await getSessionCipher(recipientUserId);
       final ciphertext = await cipher.encrypt(Uint8List.fromList(utf8.encode(plaintext)));
-
       return {
         'type': ciphertext.getType(),
         'body': base64Encode(ciphertext.serialize()),
       };
     } catch (e) {
-      // FIX Bug 23: Broaden the retry logic. If ANY encryption error occurs 
-      // (Identity mismatch, Session desync, etc.), clear the state and retry once.
+      // Auto-reset and retry ONCE on any Signal error
       final store   = await _getStore();
       final address = SignalProtocolAddress(recipientUserId, 1);
-      
-      print('⚠️ Encryption failed for $recipientUserId: $e. Attempting auto-reset and retry...');
-      
+      print('⚠️ Encryption failed for $recipientUserId: $e — auto-resetting session...');
       try {
         await store.deleteSession(address);
-        await store.deleteIdentity(address); // Also clear identity to be safe
-        
-        // Re-establish session from scratch
+        await store.deleteIdentity(address);
         final cipher     = await getSessionCipher(recipientUserId);
         final ciphertext = await cipher.encrypt(Uint8List.fromList(utf8.encode(plaintext)));
-        
-        print('✅ Auto-reset successful. Message encrypted.');
+        print('✅ Auto-reset successful.');
         return {
           'type': ciphertext.getType(),
           'body': base64Encode(ciphertext.serialize()),
         };
       } catch (retryError) {
-        print('❌ Auto-reset retry failed: $retryError');
+        print('❌ Auto-reset failed: $retryError');
         rethrow;
       }
     }
@@ -98,7 +106,7 @@ class SessionService {
   /// Decrypt a message from a sender.
   Future<String> decryptMessage(String senderUserId, Map<String, dynamic> encryptedData) async {
     try {
-      final cipher        = await getSessionCipher(senderUserId);
+      final cipher         = await getSessionCipher(senderUserId);
       final ciphertextBytes = base64Decode(encryptedData['body']);
 
       late CiphertextMessage message;
@@ -111,25 +119,21 @@ class SessionService {
       final decryptedBytes = await cipher.decrypt(message as dynamic);
       return utf8.decode(decryptedBytes);
     } catch (e) {
-      // On decrypt failure (session mismatch), auto-reset so the NEXT message
-      // triggers a fresh X3DH handshake.
-      print('⚠️ Decrypt error, auto-resetting session for $senderUserId: $e');
+      print('⚠️ Decrypt error for $senderUserId: $e — resetting session for next message');
       final store   = await _getStore();
       final address = SignalProtocolAddress(senderUserId, 1);
       await store.deleteSession(address);
-      return '[⚠️ Message could not be decrypted. Session reset — try sending again.]';
+      return '[[DECRYPTION_ERROR]]';
     }
   }
 
-  /// Reset session for a user (manual intervention if desync happens).
+  /// Full reset: clears session AND trusted identity for a user.
+  /// Use this when the manual "Reset Secure Session" button is tapped.
   Future<void> resetSession(String recipientUserId) async {
     final store   = await _getStore();
     final address = SignalProtocolAddress(recipientUserId, 1);
-    
-    // Clear session AND identity so TOFU can trigger again
     await store.deleteSession(address);
-    await store.deleteIdentity(address); 
-    
+    await store.deleteIdentity(address);
     print('🗑️ Session and Identity cleared for $recipientUserId');
   }
 }

@@ -13,7 +13,6 @@ class MessageQueue {
 
   /// Add a message to the outgoing queue (local DB)
   Future<void> enqueue(Map<String, dynamic> message) async {
-    // Add pending status if not present
     final pendingMsg = {...message, 'status': 'pending'};
     await _db.saveMessage(pendingMsg);
     processQueue();
@@ -28,17 +27,23 @@ class MessageQueue {
       final pendingMessages = await _db.getPendingMessages();
       for (var msg in pendingMessages) {
         if (!_socketService.isConnected) break;
-
-        // Emit via socket
         _socketService.socket?.emit('send_message', msg);
-        
-        // Let the 'receive_message' event update the local status to 'sent'
-        // once the backend has actually stored it. This prevents fake delivery statuses.
       }
     } catch (e) {
       print('Error processing message queue: $e');
     } finally {
       _isProcessing = false;
+    }
+  }
+
+  /// Clear all pending messages — must be called on logout so stale
+  /// encrypted payloads from the old account are never re-sent.
+  Future<void> clear() async {
+    try {
+      await _db.clearPendingMessages();
+      print('🗑️ MessageQueue cleared on logout');
+    } catch (e) {
+      print('Error clearing message queue: $e');
     }
   }
 }

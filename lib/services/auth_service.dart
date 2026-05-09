@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import 'api_service.dart';
 import 'security_service.dart';
 import 'session_service.dart';
+import 'message_queue.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -51,14 +52,18 @@ class AuthService {
         await prefs.setString(Constants.tokenKey, token);
         await prefs.setString(Constants.userKey, jsonEncode(user.toJson()));
 
-        // 5. Initialize Encryption Keys (Signal Protocol) - CRITICAL: Must succeed
+        // 5. CRITICAL: Reset old session state FIRST, then init for new user.
+        // This prevents the old account's Signal store from being used.
+        SessionService().reset();
+        await SessionService().initForUser(user.id);
+
+        // 6. Initialize Encryption Keys (Signal Protocol)
         try {
           await SecurityService().initializeKeys();
         } catch (e) {
           print("🚨 Security Key Initialization Error: $e");
-          // If security init fails, we MUST logout and fail the auth flow
           await signOut();
-          return null; 
+          return null;
         }
 
         return {
@@ -96,8 +101,10 @@ class AuthService {
 
   /// Sign out
   Future<void> signOut() async {
-    // FIX Bug 19: Reset session service to clear cached store for the next user
+    // 1. Reset session so next login starts with clean state
     SessionService().reset();
+    // 2. Clear any pending outgoing messages (they use the old session's keys)
+    await MessageQueue().clear();
     await _googleSignIn.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(Constants.tokenKey);

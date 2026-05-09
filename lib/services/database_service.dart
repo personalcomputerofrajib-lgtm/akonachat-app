@@ -166,8 +166,6 @@ class DatabaseService {
   }
 
   /// FIX Bug 13: Permanently remove a message from local storage.
-  /// Called when the server emits 'message_deleted_me' so the deletion
-  /// persists across app restarts instead of the message reappearing.
   Future<void> deleteMessage(String messageId) async {
     if (messageId.isEmpty) return;
     final db = await database;
@@ -176,6 +174,13 @@ class DatabaseService {
       where: 'id = ? OR clientMsgId = ?',
       whereArgs: [messageId, messageId],
     );
+  }
+
+  /// Clear all pending messages on logout so stale encrypted payloads
+  /// are never re-sent after an account switch.
+  Future<void> clearPendingMessages() async {
+    final db = await database;
+    await db.delete('messages', where: 'status = ?', whereArgs: ['pending']);
   }
 
   // --- Chat Methods ---

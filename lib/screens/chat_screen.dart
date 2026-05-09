@@ -1045,8 +1045,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   );
                 },
               ),
-              );  // closes return Expanded(
-            }), // closes Builder(
+            ),
             _buildMessageInput(),
           ],
         ),
