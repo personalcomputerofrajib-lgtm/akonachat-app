@@ -84,6 +84,21 @@ class _ChatScreenState extends State<ChatScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+
+  // Socket event handlers
+  dynamic _onReceiveMessage;
+  dynamic _onSyncMessages;
+  dynamic _onMessageStatus;
+  dynamic _onMessageDeletedEveryone;
+  dynamic _onMessageDeletedMe;
+  dynamic _onMessageEdited;
+  dynamic _onUserTyping;
+  dynamic _onUserStopTyping;
+  dynamic _onReactionUpdated;
+  dynamic _onChatSettingsUpdated;
+  dynamic _onPresence;
+  dynamic _onConnect;
+
   @override
   void initState() {
     super.initState();
@@ -182,7 +197,8 @@ class _ChatScreenState extends State<ChatScreen> {
       // Periodically check for key replenishment
       _securityService.checkAndReplenishPreKeys();
       
-      _socket!.on('receive_message', (data) async {
+      _onReceiveMessage = (data) async {
+      _socket!.on('receive_message', _onReceiveMessage);
         if (mounted && data['chatId'] == widget.chatId) {
           String decryptedText = data['ciphertext'] ?? '';
           
@@ -245,7 +261,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('sync_messages', (data) async {
+      _onSyncMessages = (data) async {
+      _socket!.on('sync_messages', _onSyncMessages);
         if (mounted) {
           final List newlySynced = data as List;
           
@@ -309,7 +326,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('message_status', (data) async {
+      _onMessageStatus = (data) async {
+      _socket!.on('message_status', _onMessageStatus);
         if (mounted) {
           setState(() {
             final index = _messages.indexWhere((m) => 
@@ -327,7 +345,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('message_deleted_everyone', (data) async {
+      _onMessageDeletedEveryone = (data) async {
+      _socket!.on('message_deleted_everyone', _onMessageDeletedEveryone);
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
@@ -343,7 +362,8 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       // FIX Bug 13: Persist "deleted for me" to local DB so it survives app restart
-      _socket!.on('message_deleted_me', (data) {
+      _onMessageDeletedMe = (data) {
+      _socket!.on('message_deleted_me', _onMessageDeletedMe);
         if (mounted && data['chatId'] == widget.chatId) {
           final msgId = data['msgId'];
           setState(() {
@@ -355,7 +375,8 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       // FIX Bug 14: Persist edited message to local DB
-      _socket!.on('message_edited', (data) async {
+      _onMessageEdited = (data) async {
+      _socket!.on('message_edited', _onMessageEdited);
         if (mounted && data['chatId'] == widget.chatId) {
           final String msgId = data['msgId'];
           final String? signalType = data['signalType'];
@@ -402,7 +423,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
       // FIX Bug 5: Keep both the plain bool (_isOtherUserTyping) AND the
       // ValueNotifier in sync so the typing indicator in the input bar updates.
-      _socket!.on('user_typing', (data) {
+      _onUserTyping = (data) {
+      _socket!.on('user_typing', _onUserTyping);
         if (mounted && data['chatId'] == widget.chatId) {
           _isOtherUserTyping = true;
           _isOtherUserTypingNotifier.value = true;
@@ -410,7 +432,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('user_stop_typing', (data) {
+      _onUserStopTyping = (data) {
+      _socket!.on('user_stop_typing', _onUserStopTyping);
         if (mounted && data['chatId'] == widget.chatId) {
           _isOtherUserTyping = false;
           _isOtherUserTypingNotifier.value = false;
@@ -430,7 +453,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('chat_settings_updated', (data) {
+      _onChatSettingsUpdated = (data) {
+      _socket!.on('chat_settings_updated', _onChatSettingsUpdated);
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             if (data['themeColor'] != null) {
@@ -445,7 +469,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('presence', (data) {
+      _onPresence = (data) {
+      _socket!.on('presence', _onPresence);
         if (mounted && data['userId'] != _currentUser?.id) {
           setState(() {
             _isOtherUserOnline = data['isOnline'];
@@ -454,7 +479,8 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       });
 
-      _socket!.on('connect', (_) {
+      _onConnect = (_) {
+      _socket!.on('connect', _onConnect);
         _socket!.emit('join', {'chatId': widget.chatId});
         _syncMessages();
       });
@@ -506,18 +532,18 @@ class _ChatScreenState extends State<ChatScreen> {
     _searchController.dispose();
     // FIX Bug 6: Remove ALL socket listeners to prevent memory leaks
     // and setState-after-dispose crashes
-    _socket?.off('receive_message');
-    _socket?.off('sync_messages');
-    _socket?.off('message_status');
-    _socket?.off('message_deleted_everyone');
-    _socket?.off('message_deleted_me');
-    _socket?.off('message_edited');
-    _socket?.off('user_typing');
-    _socket?.off('user_stop_typing');
-    _socket?.off('message_reaction_updated');
-    _socket?.off('chat_settings_updated');
-    _socket?.off('presence');
-    _socket?.off('connect');
+    _socket?.off('receive_message', _onReceiveMessage);
+    _socket?.off('sync_messages', _onSyncMessages);
+    _socket?.off('message_status', _onMessageStatus);
+    _socket?.off('message_deleted_everyone', _onMessageDeletedEveryone);
+    _socket?.off('message_deleted_me', _onMessageDeletedMe);
+    _socket?.off('message_edited', _onMessageEdited);
+    _socket?.off('user_typing', _onUserTyping);
+    _socket?.off('user_stop_typing', _onUserStopTyping);
+    _socket?.off('message_reaction_updated', _onReactionUpdated);
+    _socket?.off('chat_settings_updated', _onChatSettingsUpdated);
+    _socket?.off('presence', _onPresence);
+    _socket?.off('connect', _onConnect);
     // Stop and dispose recorder
     if (_isRecording) {
       _audioRecorder.stop();
