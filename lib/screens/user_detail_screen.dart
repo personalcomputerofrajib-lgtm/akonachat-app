@@ -596,9 +596,9 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         Uri.parse('${Constants.apiUrl}/chats/private'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer \$token',
+          'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'participantId': widget.userId}),
+        body: jsonEncode({'targetUserId': widget.userId}),
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -623,7 +623,7 @@ class _UserDetailScreenState extends State<UserDetailScreen> {
         }
       }
     } catch (e) {
-      print('Error starting chat: \$e');
+      print('Error starting chat: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Network error. Please try again.')),
