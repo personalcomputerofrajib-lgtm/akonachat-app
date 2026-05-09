@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'dart:convert';
 import 'dart:async'; // Import for Completer
 import 'security_service.dart';
+import 'auth_service.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();

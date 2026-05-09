@@ -1756,10 +1756,8 @@ class _ChatScreenState extends State<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Secure session reset. Next message will start a new handshake.'))
       );
-    }
   }
-};
-
+}
 
 class _VoicePlayer extends StatefulWidget {
   final String? url;
