@@ -279,12 +279,23 @@ class _ChatScreenState extends State<ChatScreen> {
             
             msg['ciphertext'] = decryptedText;
 
-            if (!_messages.any((m) => m['_id'] == msg['_id'])) {
+            final existingIndex = _messages.indexWhere((m) => 
+                (m['_id'] != null && m['_id'] == msg['_id']) || 
+                (m['clientMsgId'] != null && m['clientMsgId'] == msg['clientMsgId'])
+            );
+
+            if (existingIndex == -1) {
               setState(() {
                 _messages.insert(0, msg);
               });
               // Persist locally
               await DatabaseService().saveMessage(msg);
+            } else {
+              // Complete the sync by updating the pending local message with the official server _id
+              setState(() {
+                _messages[existingIndex] = Map<String, dynamic>.from(msg);
+              });
+              await DatabaseService().saveMessage(_messages[existingIndex]);
             }
           }
 
@@ -301,9 +312,15 @@ class _ChatScreenState extends State<ChatScreen> {
       _socket!.on('message_status', (data) async {
         if (mounted) {
           setState(() {
-            final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
+            final index = _messages.indexWhere((m) => 
+                (m['_id'] != null && m['_id'] == data['msgId']) || 
+                (m['clientMsgId'] != null && data['clientMsgId'] != null && m['clientMsgId'] == data['clientMsgId'])
+            );
             if (index != -1) {
               _messages[index]['status'] = data['status'];
+              if (_messages[index]['_id'] == null && data['msgId'] != null) {
+                _messages[index]['_id'] = data['msgId'];
+              }
               DatabaseService().saveMessage(_messages[index]); // Sync local state
             }
           });
