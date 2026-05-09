@@ -170,50 +170,71 @@ class SecurityService {
       if (_currentUserId == null) return;
     }
 
-    // Cooldown check (don't check more than once every hour)
-    if (_lastCheckTime != null && DateTime.now().difference(_lastCheckTime!).inHours < 1) {
+    // Cooldown check (don't check more than once every 10 minutes for dev-speed)
+    if (_lastCheckTime != null && DateTime.now().difference(_lastCheckTime!).inMinutes < 10) {
       return;
     }
     _lastCheckTime = DateTime.now();
 
-    final lastIdStr = await _storage.read(key: _prefixed(_lastPreKeyIdKey)) ?? '0';
-    int lastId = int.parse(lastIdStr);
-
-    final timestampStr = await _storage.read(key: _prefixed(_signedPreKeyTimestampKey)) ?? '0';
-    final timestamp = int.parse(timestampStr);
-    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
-
-    bool needsSignedRotation = timestamp < sevenDaysAgo;
-
-    if (needsSignedRotation) {
-      final identityData = await _storage.read(key: _prefixed(_identityKeyPairKey));
-      if (identityData == null) return;
-      final identityKeyPair = IdentityKeyPair.fromSerialized(base64Decode(identityData));
-
-      final registrationIdStr = await _storage.read(key: _prefixed(_registrationIdKey)) ?? '0';
-      final registrationId = int.parse(registrationIdStr);
-
-      // New Signed Pre-Key
-      final newSignedId = (timestamp % 1000) + 1;
-      final signedPreKey = generateSignedPreKey(identityKeyPair, newSignedId);
-
-      // New One-Time Pre-Keys
-      final oneTimePreKeys = generatePreKeys(lastId + 1, 100);
-      final newLastId = lastId + 100;
-
-      // Update storage
-      await _storage.write(key: _prefixed(_signedPreKeyKey),          value: base64Encode(signedPreKey.serialize()));
-      await _storage.write(key: _prefixed(_signedPreKeyTimestampKey), value: DateTime.now().millisecondsSinceEpoch.toString());
-      await _storage.write(key: _prefixed(_lastPreKeyIdKey),          value: newLastId.toString());
-
-      // Also store the new signed prekey so the store can load it
-      await _storage.write(
-        key: '${_currentUserId!}_signal_signed_prekey_$newSignedId',
-        value: base64Encode(signedPreKey.serialize()),
+    try {
+      final token = await AuthService().getToken();
+      final statusResp = await http.get(
+        Uri.parse('${Constants.apiUrl}/keys/status'),
+        headers: {'Authorization': 'Bearer $token'},
       );
 
-      // Upload to server (appends prekeys — not overwrites, handled server-side)
-      await _uploadBundle(identityKeyPair, registrationId, signedPreKey, oneTimePreKeys);
+      if (statusResp.statusCode == 200) {
+        final status = jsonDecode(statusResp.body);
+        final int remoteCount = status['count'] ?? 0;
+        final bool needsInit = status['needsInitialization'] ?? false;
+
+        final lastIdStr = await _storage.read(key: _prefixed(_lastPreKeyIdKey)) ?? '0';
+        int lastId = int.parse(lastIdStr);
+
+        final timestampStr = await _storage.read(key: _prefixed(_signedPreKeyTimestampKey)) ?? '0';
+        final timestamp = int.parse(timestampStr);
+        final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7)).millisecondsSinceEpoch;
+
+        bool needsSignedRotation = timestamp < sevenDaysAgo;
+        bool needsPreKeyReplenishment = remoteCount < 20 || needsInit;
+
+        if (needsSignedRotation || needsPreKeyReplenishment) {
+          print('🔄 Replenishing keys: remoteCount=$remoteCount, needsInit=$needsInit, rotation=$needsSignedRotation');
+          
+          final identityData = await _storage.read(key: _prefixed(_identityKeyPairKey));
+          if (identityData == null) return;
+          final identityKeyPair = IdentityKeyPair.fromSerialized(base64Decode(identityData));
+
+          final registrationIdStr = await _storage.read(key: _prefixed(_registrationIdKey)) ?? '0';
+          final registrationId = int.parse(registrationIdStr);
+
+          // Get the current Signed Pre-Key or generate a new one if rotating
+          SignedPreKeyRecord signedPreKey;
+          int signedId = 1; // Default
+          
+          if (needsSignedRotation) {
+            signedId = (timestamp % 1000) + 1;
+            signedPreKey = generateSignedPreKey(identityKeyPair, signedId);
+            await _storage.write(key: _prefixed(_signedPreKeyKey), value: base64Encode(signedPreKey.serialize()));
+            await _storage.write(key: _prefixed(_signedPreKeyTimestampKey), value: DateTime.now().millisecondsSinceEpoch.toString());
+            await _storage.write(key: '${_currentUserId!}_signal_signed_prekey_$signedId', value: base64Encode(signedPreKey.serialize()));
+          } else {
+            final existingSigned = await _storage.read(key: _prefixed(_signedPreKeyKey));
+            signedPreKey = SignedPreKeyRecord.fromSerialized(base64Decode(existingSigned!));
+          }
+
+          // Generate 50 fresh One-Time Pre-Keys
+          final oneTimePreKeys = generatePreKeys(lastId + 1, 50);
+          final newLastId = lastId + 50;
+          await _storage.write(key: _prefixed(_lastPreKeyIdKey), value: newLastId.toString());
+
+          // Upload to server (Appends)
+          await _uploadBundle(identityKeyPair, registrationId, signedPreKey, oneTimePreKeys);
+          print('✅ Keys replenished successfully.');
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error during key replenishment check: $e');
     }
   }
 }

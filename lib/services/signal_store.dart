@@ -177,6 +177,12 @@ class PersistentSignalStore implements
     if (data == null) return null;
     return IdentityKey(Curve.decodePoint(base64Decode(data), 0));
   }
+  
+  /// Clear the identity for a user (used for session reset)
+  Future<void> deleteIdentity(SignalProtocolAddress address) async {
+    final key = '$_identityPrefix${address.toString()}';
+    await _storage.delete(key: key);
+  }
 
   /// Helper: constant-time byte comparison
   bool _bytesEqual(Uint8List a, Uint8List b) {

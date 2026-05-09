@@ -1004,27 +1004,20 @@ class _ChatScreenState extends State<ChatScreen> {
             : null,
         child: Column(
           children: [
-            // FIX Bug 10: Pre-compute the filtered list ONCE outside the builder.
-            // Previously this was O(N²) — recalculated for every single item.
-            Builder(builder: (context) {
-              final List<Map<String, dynamic>> filteredMessages =
-                  _isSearching && _searchQuery.isNotEmpty
-                      ? _messages
-                          .where((m) => (m['ciphertext'] ?? '')
-                              .toString()
-                              .toLowerCase()
-                              .contains(_searchQuery))
-                          .toList()
-                      : _messages;
-              return Expanded(
+            Expanded(
               child: ListView.builder(
                 controller: _scrollController,
                 reverse: true,
                 padding: EdgeInsets.all(16),
-                itemCount: filteredMessages.length,
+                itemCount: _messages.length,
                 itemBuilder: (context, index) {
+                  final msg = _messages[index];
                   
-                  final msg = filteredMessages[index];
+                  // Search filtering (efficient check)
+                  if (_isSearching && _searchQuery.isNotEmpty) {
+                    final text = (msg['ciphertext'] ?? '').toString().toLowerCase();
+                    if (!text.contains(_searchQuery)) return const SizedBox.shrink();
+                  }
                   final String currentUserId = _currentUser?.id ?? '';
 
                   // Filter out "Delete for Me" messages

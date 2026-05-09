@@ -68,21 +68,30 @@ class SessionService {
         'body': base64Encode(ciphertext.serialize()),
       };
     } catch (e) {
-      // If encryption fails due to session state, reset and retry once
+      // FIX Bug 23: Broaden the retry logic. If ANY encryption error occurs 
+      // (Identity mismatch, Session desync, etc.), clear the state and retry once.
       final store   = await _getStore();
       final address = SignalProtocolAddress(recipientUserId, 1);
-      if (e.toString().contains('InvalidMessage') || e.toString().contains('session')) {
-        print('⚠️ Encryption session error, resetting: $e');
+      
+      print('⚠️ Encryption failed for $recipientUserId: $e. Attempting auto-reset and retry...');
+      
+      try {
         await store.deleteSession(address);
+        await store.deleteIdentity(address); // Also clear identity to be safe
+        
         // Re-establish session from scratch
         final cipher     = await getSessionCipher(recipientUserId);
         final ciphertext = await cipher.encrypt(Uint8List.fromList(utf8.encode(plaintext)));
+        
+        print('✅ Auto-reset successful. Message encrypted.');
         return {
           'type': ciphertext.getType(),
           'body': base64Encode(ciphertext.serialize()),
         };
+      } catch (retryError) {
+        print('❌ Auto-reset retry failed: $retryError');
+        rethrow;
       }
-      rethrow;
     }
   }
 
@@ -116,6 +125,11 @@ class SessionService {
   Future<void> resetSession(String recipientUserId) async {
     final store   = await _getStore();
     final address = SignalProtocolAddress(recipientUserId, 1);
+    
+    // Clear session AND identity so TOFU can trigger again
     await store.deleteSession(address);
+    await store.deleteIdentity(address); 
+    
+    print('🗑️ Session and Identity cleared for $recipientUserId');
   }
 }
