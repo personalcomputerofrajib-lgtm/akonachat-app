@@ -128,29 +128,36 @@ class _ChatScreenState extends State<ChatScreen> {
       if (response.statusCode == 200) {
         final chatData = jsonDecode(response.body);
         final List participants = chatData['participants'];
-        final other = participants.firstWhere((p) => p['_id'] != user?.id, orElse: () => null);
-        if (other != null) {
-          setState(() {
+        var other = participants.firstWhere((p) => p['_id'] != user?.id, orElse: () => null);
+        
+        // Fallback for self-chat (notepad feature)
+        if (other == null && participants.isNotEmpty) {
+          other = participants[0];
+        }
+
+        setState(() {
+          if (other != null) {
             _otherUser = UserModel.fromJson(other);
             _isOtherUserOnline = _otherUser?.isOnline;
             _lastSeen = _otherUser?.lastSeen;
-            if (chatData['themeColor'] != null) {
-              try {
-                _themeColor = Color(int.parse(chatData['themeColor'].replaceAll('#', '0xFF')));
-              } catch (e) {
-                _themeColor = Colors.blueAccent;
-              }
+          }
+          
+          if (chatData['themeColor'] != null) {
+            try {
+              _themeColor = Color(int.parse(chatData['themeColor'].replaceAll('#', '0xFF')));
+            } catch (e) {
+              _themeColor = Colors.blueAccent;
             }
-            if (chatData['backgroundColor'] != null) {
-              try {
-                _chatBackgroundColor = Color(int.parse(chatData['backgroundColor'].replaceAll('#', '0xFF')));
-              } catch (e) {
-                _chatBackgroundColor = Colors.white;
-              }
+          }
+          if (chatData['backgroundColor'] != null) {
+            try {
+              _chatBackgroundColor = Color(int.parse(chatData['backgroundColor'].replaceAll('#', '0xFF')));
+            } catch (e) {
+              _chatBackgroundColor = Colors.white;
             }
-            _wallpaperUrl = chatData['wallpaperUrl'];
-          });
-        }
+          }
+          _wallpaperUrl = chatData['wallpaperUrl'];
+        });
       } else if (response.statusCode == 401) {
         _logout();
         return;
@@ -179,10 +186,17 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted && data['chatId'] == widget.chatId) {
           String decryptedText = data['ciphertext'] ?? '';
           
-          // 1. Decrypt if it's an encrypted message from the other user
-          if (data['senderId'] != null && 
-              data['senderId']['_id'] != _currentUser?.id && 
-              data['signalType'] != null) {
+          final bool isMyMessage = data['senderId'] != null && data['senderId']['_id'] == _currentUser?.id;
+
+          if (isMyMessage) {
+            final String? clientMsgId = data['clientMsgId'];
+            if (clientMsgId != null) {
+              final existingIndex = _messages.indexWhere((m) => m['clientMsgId'] == clientMsgId);
+              if (existingIndex != -1 && _messages[existingIndex]['ciphertext'] != null) {
+                decryptedText = _messages[existingIndex]['ciphertext']; // Preserve plaintext
+              }
+            }
+          } else if (data['signalType'] != null) {
             try {
               decryptedText = await _sessionService.decryptMessage(
                 data['senderId']['_id'], 
@@ -238,10 +252,17 @@ class _ChatScreenState extends State<ChatScreen> {
           for (var msg in newlySynced) {
             String decryptedText = msg['ciphertext'] ?? '';
             
-            // Decrypt if it's an encrypted message from the other user
-            if (msg['senderId'] != null && 
-                msg['senderId']['_id'] != _currentUser?.id && 
-                msg['signalType'] != null) {
+            final bool isMyMessage = msg['senderId'] != null && msg['senderId']['_id'] == _currentUser?.id;
+
+            if (isMyMessage) {
+              final String? clientMsgId = msg['clientMsgId'];
+              if (clientMsgId != null) {
+                final existingIndex = _messages.indexWhere((m) => m['clientMsgId'] == clientMsgId);
+                if (existingIndex != -1 && _messages[existingIndex]['ciphertext'] != null) {
+                  decryptedText = _messages[existingIndex]['ciphertext'];
+                }
+              }
+            } else if (msg['signalType'] != null) {
               try {
                 decryptedText = await _sessionService.decryptMessage(
                   msg['senderId']['_id'], 
