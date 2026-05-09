@@ -31,8 +31,22 @@ class DatabaseService {
     }
   }
 
+  /// Closes the database connection and resets the singleton instance.
+  /// Must be called during logout to prevent cross-account data leaks.
+  Future<void> closeAndReset() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    _dbCompleter = null;
+  }
+
   Future<Database> _initDatabase() async {
-    final String path = join(await getDatabasesPath(), 'akonachat_secure.db');
+    // SECURITY FIX: Namespace the database file by the current user's ID 
+    // so multiple accounts on the same device do not share or overwrite local storage.
+    final user = await AuthService().loadUser();
+    final userId = user?.id ?? 'default';
+    final String path = join(await getDatabasesPath(), 'akonachat_secure_$userId.db');
     String? dbKey = await SecurityService().getDatabaseKey();
     
     // OFFLINE FIX: If DB key not yet initialized (e.g., first offline start),

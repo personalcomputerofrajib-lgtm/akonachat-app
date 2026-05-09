@@ -7,6 +7,7 @@ import 'api_service.dart';
 import 'security_service.dart';
 import 'session_service.dart';
 import 'message_queue.dart';
+import 'database_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -105,6 +106,9 @@ class AuthService {
     SessionService().reset();
     // 2. Clear any pending outgoing messages (they use the old session's keys)
     await MessageQueue().clear();
+    // 3. Close the encrypted local database to prevent cross-account leaks
+    await DatabaseService().closeAndReset();
+
     await _googleSignIn.signOut();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(Constants.tokenKey);
