@@ -198,7 +198,6 @@ class _ChatScreenState extends State<ChatScreen> {
       _securityService.checkAndReplenishPreKeys();
       
       _onReceiveMessage = (data) async {
-      _socket!.on('receive_message', _onReceiveMessage);
         if (mounted && data['chatId'] == widget.chatId) {
           String decryptedText = data['ciphertext'] ?? '';
           
@@ -259,10 +258,12 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           }
         }
-      });
+      };
+      _socket!.on('receive_message', _onReceiveMessage);
+      
 
       _onSyncMessages = (data) async {
-      _socket!.on('sync_messages', _onSyncMessages);
+      
         if (mounted) {
           final List newlySynced = data as List;
           
@@ -324,10 +325,11 @@ class _ChatScreenState extends State<ChatScreen> {
             });
           });
         }
-      });
+      };
+      _socket!.on('sync_messages', _onSyncMessages);
 
       _onMessageStatus = (data) async {
-      _socket!.on('message_status', _onMessageStatus);
+      
         if (mounted) {
           setState(() {
             final index = _messages.indexWhere((m) => 
@@ -343,10 +345,11 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
         }
-      });
+      };
+      _socket!.on('message_status', _onMessageStatus);
 
       _onMessageDeletedEveryone = (data) async {
-      _socket!.on('message_deleted_everyone', _onMessageDeletedEveryone);
+      
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
@@ -359,11 +362,12 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
         }
-      });
+      };
+      _socket!.on('message_deleted_everyone', _onMessageDeletedEveryone);
 
       // FIX Bug 13: Persist "deleted for me" to local DB so it survives app restart
       _onMessageDeletedMe = (data) {
-      _socket!.on('message_deleted_me', _onMessageDeletedMe);
+      
         if (mounted && data['chatId'] == widget.chatId) {
           final msgId = data['msgId'];
           setState(() {
@@ -372,11 +376,12 @@ class _ChatScreenState extends State<ChatScreen> {
           // Mark deleted in local DB by saving a tombstone flag
           DatabaseService().deleteMessage(msgId);
         }
-      });
+      };
+      _socket!.on('message_deleted_me', _onMessageDeletedMe);
 
       // FIX Bug 14: Persist edited message to local DB
       _onMessageEdited = (data) async {
-      _socket!.on('message_edited', _onMessageEdited);
+      
         if (mounted && data['chatId'] == widget.chatId) {
           final String msgId = data['msgId'];
           final String? signalType = data['signalType'];
@@ -419,29 +424,32 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
         }
-      });
+      };
+      _socket!.on('message_edited', _onMessageEdited);
 
       // FIX Bug 5: Keep both the plain bool (_isOtherUserTyping) AND the
       // ValueNotifier in sync so the typing indicator in the input bar updates.
       _onUserTyping = (data) {
-      _socket!.on('user_typing', _onUserTyping);
+      
         if (mounted && data['chatId'] == widget.chatId) {
           _isOtherUserTyping = true;
           _isOtherUserTypingNotifier.value = true;
           setState(() {});
         }
-      });
+      };
+      _socket!.on('user_typing', _onUserTyping);
 
       _onUserStopTyping = (data) {
-      _socket!.on('user_stop_typing', _onUserStopTyping);
+      
         if (mounted && data['chatId'] == widget.chatId) {
           _isOtherUserTyping = false;
           _isOtherUserTypingNotifier.value = false;
           setState(() {});
         }
-      });
+      };
+      _socket!.on('user_stop_typing', _onUserStopTyping);
 
-      _socket!.on('message_reaction_updated', (data) async {
+      _onReactionUpdated = (data) async {
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             final index = _messages.indexWhere((m) => m['_id'] == data['msgId']);
@@ -451,10 +459,10 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           });
         }
-      });
+      };
 
       _onChatSettingsUpdated = (data) {
-      _socket!.on('chat_settings_updated', _onChatSettingsUpdated);
+      
         if (mounted && data['chatId'] == widget.chatId) {
           setState(() {
             if (data['themeColor'] != null) {
@@ -467,24 +475,26 @@ class _ChatScreenState extends State<ChatScreen> {
             _wallpaperUrl = data['wallpaperUrl'];
           });
         }
-      });
+      };
+      _socket!.on('chat_settings_updated', _onChatSettingsUpdated);
 
       _onPresence = (data) {
-      _socket!.on('presence', _onPresence);
+      
         if (mounted && data['userId'] != _currentUser?.id) {
           setState(() {
             _isOtherUserOnline = data['isOnline'];
             _lastSeen = data['lastSeen'] != null ? DateTime.parse(data['lastSeen']) : null;
           });
         }
-      });
+      };
+      _socket!.on('presence', _onPresence);
 
       _onConnect = (_) {
-      _socket!.on('connect', _onConnect);
+      
         _socket!.emit('join', {'chatId': widget.chatId});
-        _syncMessages();
-      });
-    }
+      };
+      _socket!.on('connect', _onConnect);
+    };
   }
 
   Future<void> _loadLocalMessages() async {
@@ -764,7 +774,8 @@ class _ChatScreenState extends State<ChatScreen> {
         'clientMsgId': clientMsgId,
       };
 
-      _socket!.emit('send_message', msgData);
+      // Use queue for reliable delivery instead of direct socket emit
+      MessageQueue().enqueue(msgData);
 
       final msg = {
         'chatId': widget.chatId,
@@ -859,7 +870,8 @@ class _ChatScreenState extends State<ChatScreen> {
           'clientMsgId': clientMsgId,
         };
 
-        _socket!.emit('send_message', msgData);
+        // Use queue for reliable delivery instead of direct socket emit
+        MessageQueue().enqueue(msgData);
 
         final msg = {
           'chatId': widget.chatId,
@@ -1746,7 +1758,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
   }
-}
+};
 
 
 class _VoicePlayer extends StatefulWidget {

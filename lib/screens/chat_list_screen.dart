@@ -449,10 +449,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 final lastMsg = chat['lastMessage'];
                 int unreadCount = 0;
                 if (chat['lastReadBy'] != null) {
-                  final myReadInfo = (chat['lastReadBy'] as List).firstWhere(
-                    (r) => r['userId'].toString().toLowerCase().trim() == _currentUser?.id.toString().toLowerCase().trim(),
-                    orElse: () => null,
-                  );
+                  Map<String, dynamic>? myReadInfo;
+                  for (var r in (chat['lastReadBy'] as List)) {
+                    if (r['userId'].toString().toLowerCase().trim() == _currentUser?.id.toString().toLowerCase().trim()) {
+                      myReadInfo = r as Map<String, dynamic>?;
+                      break;
+                    }
+                  }
                   if (myReadInfo != null) {
                     unreadCount = (chat['lastSequence'] ?? 0) - (myReadInfo['lastReadSequence'] ?? 0);
                     if (unreadCount < 0) unreadCount = 0;
