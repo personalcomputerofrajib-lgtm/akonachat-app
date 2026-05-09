@@ -531,15 +531,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
       onTap: () async {
         if (_isNavigating) return;
         _isNavigating = true;
-        await Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChatScreen(
-              chatId: chatId,
-              chatName: name,
+        try {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                chatId: chatId,
+                chatName: name,
+              ),
             ),
-          ),
-        ).then((_) => _isNavigating = false);
+          );
+        } finally {
+          _isNavigating = false;
+        }
         // Refresh when returning from the chat to clear the unread badge
         _loadChats();
       },

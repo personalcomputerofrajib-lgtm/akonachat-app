@@ -41,10 +41,10 @@ class ApiService {
             response = await http.post(uri, headers: requestHeaders, body: jsonEncode(body ?? {})).timeout(timeout);
             break;
           case 'PATCH':
-            response = await http.patch(uri, headers: requestHeaders, body: jsonEncode(body)).timeout(timeout);
+            response = await http.patch(uri, headers: requestHeaders, body: jsonEncode(body ?? {})).timeout(timeout);
             break;
           case 'PUT':
-            response = await http.put(uri, headers: requestHeaders, body: jsonEncode(body)).timeout(timeout);
+            response = await http.put(uri, headers: requestHeaders, body: jsonEncode(body ?? {})).timeout(timeout);
             break;
           case 'DELETE':
             response = await http.delete(uri, headers: requestHeaders).timeout(timeout);
