@@ -59,16 +59,17 @@ class UserModel {
       hasCompletedOnboarding: json['hasCompletedOnboarding'] == true,
       isOnline: json['isOnline'] == true,
       lastSeen: json['lastSeen'] != null ? DateTime.tryParse(json['lastSeen'].toString()) : null,
-      coins: json['coins'] ?? 0,
-      streak: json['streak'] ?? 0,
-      giftCount: json['giftCount'] ?? 0,
+      coins: (json['coins'] as num?)?.toInt() ?? 0,
+      streak: (json['streak'] as num?)?.toInt() ?? 0,
+      giftCount: (json['giftCount'] as num?)?.toInt() ?? 0,
       profileBanner: json['profileBanner']?.toString(),
+      animeBanner: json['animeBanner']?.toString(),
       gameId: json['gameId']?.toString(),
       signature: json['signature']?.toString(),
       guards: json['guards'] ?? [],
       titles: json['titles'] ?? [],
-      xp: json['xp'] ?? 0,
-      level: json['level'] ?? 1,
+      xp: (json['xp'] as num?)?.toInt() ?? 0,
+      level: (json['level'] as num?)?.toInt() ?? 1,
     );
   }
 
