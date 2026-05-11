@@ -31,22 +31,22 @@ class _ProfileScreenState extends State<ProfileScreen> with RouteAware {
 
   final Map<String, List<Map<String, String>>> _bannerCategories = {
     'Gaming': [
-      {'name': 'PUBG', 'url': 'http://52.66.216.152:9000/static/pubg_banner.jpg'},
-      {'name': 'BGMI', 'url': 'http://52.66.216.152:9000/static/bgmi_banner.jpg'},
-      {'name': 'Free Fire', 'url': 'http://52.66.216.152:9000/static/free_fire_banner.jpg'},
-      {'name': 'COD', 'url': 'http://52.66.216.152:9000/static/call_of_duty.jpg'},
+      {'name': 'PUBG', 'url': '${Constants.serverUrl}/static/pubg_banner.jpg'},
+      {'name': 'BGMI', 'url': '${Constants.serverUrl}/static/bgmi_banner.jpg'},
+      {'name': 'Free Fire', 'url': '${Constants.serverUrl}/static/free_fire_banner.jpg'},
+      {'name': 'COD', 'url': '${Constants.serverUrl}/static/call_of_duty.jpg'},
     ],
     'Naruto': List.generate(8, (i) => {
       'name': 'Naruto ${i + 1}',
-      'url': 'http://52.66.216.152:9000/static/naruto/BANNER ${i + 1}${i == 0 ? ".PNG" : ".jpg"}'
+      'url': '${Constants.serverUrl}/static/naruto/BANNER ${i + 1}${i == 0 ? ".PNG" : ".jpg"}'
     }),
     'Dragon Ball': List.generate(10, (i) => {
       'name': 'DB ${i + 1}',
-      'url': 'http://52.66.216.152:9000/static/dragonball/BANNER ${i + 1} OF DRAGON BALL.jpg'
+      'url': '${Constants.serverUrl}/static/dragonball/BANNER ${i + 1} OF DRAGON BALL.jpg'
     }),
     'One Piece': List.generate(5, (i) => {
       'name': 'OP ${i + 1}',
-      'url': 'http://52.66.216.152:9000/static/onepiece/BANNER ${i + 1} OF ONE PIECE.jpg'
+      'url': '${Constants.serverUrl}/static/onepiece/BANNER ${i + 1} OF ONE PIECE.jpg'
     }),
   };
 

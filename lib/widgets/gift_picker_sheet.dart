@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../config/constants.dart';
 
 class GiftPickerSheet extends StatefulWidget {
   final String recipientId;
@@ -123,7 +124,7 @@ class _GiftPickerSheetState extends State<GiftPickerSheet> {
                       children: [
                         if (gift['isStatic'] == true)
                           CachedNetworkImage(
-                            imageUrl: 'http://52.66.216.152:9000/static/${gift['id']}.png',
+                            imageUrl: '${Constants.serverUrl}/static/${gift['id']}.png',
                             height: 40,
                             width: 40,
                             placeholder: (context, url) => Icon(Icons.card_giftcard, color: gift['color'], size: 36),
@@ -138,7 +139,7 @@ class _GiftPickerSheetState extends State<GiftPickerSheet> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             CachedNetworkImage(
-                              imageUrl: 'http://52.66.216.152:9000/static/coin.png',
+                              imageUrl: '${Constants.serverUrl}/static/coin.png',
                               height: 14,
                               width: 14,
                               placeholder: (context, url) => const Icon(Icons.monetization_on, size: 14, color: Colors.orangeAccent),

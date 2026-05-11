@@ -27,16 +27,26 @@ class AuthService {
   Future<Map<String, dynamic>?> signInWithGoogle() async {
     try {
       // 1. Authenticate with Google First
+      print(">>> [AUTH] Starting Google Sign-In...");
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return null; // User aborted sign-in
+      if (googleUser == null) {
+        print(">>> [AUTH] User aborted Google sign-in.");
+        return null; 
+      }
+      print(">>> [AUTH] Google User: ${googleUser.email}");
 
       // 2. Extract Authentication Tokens
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
-
-      if (idToken == null) throw Exception("Failed to retrieve ID Token from Google.");
+      
+      if (idToken == null) {
+        print("❌ [AUTH] Failed to retrieve ID Token from Google.");
+        throw Exception("Failed to retrieve ID Token from Google.");
+      }
+      print(">>> [AUTH] ID Token retrieved (len: ${idToken.length})");
 
       // 3. Send ID Token to our backend via ApiService
+      print(">>> [AUTH] Sending ID Token to backend: ${Constants.apiUrl}/auth/google");
       final response = await _apiService.post(
         '/auth/google',
         body: {'idToken': idToken},
@@ -44,10 +54,11 @@ class AuthService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print("✅ [AUTH] Backend Login Success: ${data['user']['email']}");
         final String token = data['token'];
         final UserModel user = UserModel.fromJson(data['user']);
         final bool requiresUsername = data['requiresUsername'] ?? false;
-
+// ... (rest of the code remains the same)
         // 4. Persist Auth Details
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(Constants.tokenKey, token);
@@ -62,7 +73,7 @@ class AuthService {
         try {
           await SecurityService().initializeKeys();
         } catch (e) {
-          print("🚨 Security Key Initialization Error: $e");
+          print("🚨 [AUTH] Security Key Initialization Error: $e");
           await signOut();
           return null;
         }
@@ -72,12 +83,13 @@ class AuthService {
           'requiresUsername': requiresUsername,
         };
       } else {
-        print("Backend Auth Error: ${response.body}");
+        print("❌ [AUTH] Backend Auth Error: Status ${response.statusCode}");
+        print("❌ [AUTH] Backend Error Body: ${response.body}");
         _googleSignIn.signOut();
         return null;
       }
     } catch (error) {
-      print("Google Sign-In Error: $error");
+      print("❌ [AUTH] Google Sign-In Exception: $error");
       return null;
     }
   }

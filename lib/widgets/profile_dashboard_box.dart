@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import '../models/user_model.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../config/constants.dart';
 
 class ProfileDashboardBox extends StatelessWidget {
   final UserModel user;
@@ -144,7 +145,7 @@ class ProfileDashboardBox extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           CachedNetworkImage(
-            imageUrl: 'http://52.66.216.152:9000/static/coin.png',
+            imageUrl: '${Constants.serverUrl}/static/coin.png',
             height: 20,
             width: 20,
             placeholder: (context, url) => const Icon(Icons.monetization_on, color: Colors.yellowAccent, size: 18),
@@ -203,7 +204,7 @@ class ProfileDashboardBox extends StatelessWidget {
             shape: BoxShape.circle,
           ),
           child: CachedNetworkImage(
-            imageUrl: 'http://52.66.216.152:9000/static/$itemId.png',
+            imageUrl: '${Constants.serverUrl}/static/$itemId.png',
             height: 32,
             width: 32,
             placeholder: (context, url) => const Icon(Icons.card_giftcard, color: Colors.white, size: 20),
