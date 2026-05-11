@@ -163,7 +163,7 @@ class _DailyRewardPopupState extends State<DailyRewardPopup> {
           if (day == 7)
             const Icon(Icons.card_giftcard, color: Color(0xFFFF5722), size: 28)
           else
-            const Icon(Icons.monetization_on, color: Color(0xFFFFC107), size: 20),
+            Image.asset('assets/images/akonacoin.png', width: 24, height: 24),
           const SizedBox(height: 4),
           Text(
             day == 7 ? 'Mystery' : '+$amount',
