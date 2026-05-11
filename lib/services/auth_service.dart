@@ -113,6 +113,7 @@ class AuthService {
   }
 
   /// Sign out
+  Future<void> signOut() async {
     // 1. Reset services so next login starts with clean state
     SessionService().reset();
     SecurityService().reset();
