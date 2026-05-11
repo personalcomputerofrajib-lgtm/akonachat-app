@@ -1752,10 +1752,22 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     if (confirm == true) {
-      await _sessionService.resetSession(_otherUser!.id);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Secure session reset. Next message will start a new handshake.'))
+        const SnackBar(content: Text('Repairing secure connection...'), duration: Duration(seconds: 2))
       );
+      
+      // 1. Clear local session for this recipient
+      await _sessionService.resetSession(_otherUser!.id);
+      
+      // 2. FORCE REGENERATE and re-upload our own keys.
+      // This tells the other person "I have a new identity, throw away my old keys".
+      await _securityService.forceRefreshKeys();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Secure connection repaired! Try sending a message now.'))
+        );
+      }
     }
   }
 }

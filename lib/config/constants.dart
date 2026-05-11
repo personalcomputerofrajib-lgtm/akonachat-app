@@ -1,7 +1,7 @@
 class Constants {
   // Local PC Backend (for testing):
-  static const String serverUrl = 'http://10.43.18.30:9000';
-  static const String apiUrl = 'http://10.43.18.30:9000/api';
+  static const String serverUrl = 'http://192.168.0.142:9000';
+  static const String apiUrl = 'http://192.168.0.142:9000/api';
 
   // Production AWS Server (uncomment to deploy):
   // static const String serverUrl = 'http://52.66.216.152:9000';

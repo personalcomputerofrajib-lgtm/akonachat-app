@@ -132,8 +132,16 @@ class SessionService {
   Future<void> resetSession(String recipientUserId) async {
     final store   = await _getStore();
     final address = SignalProtocolAddress(recipientUserId, 1);
+    
+    // Clear everything for this specific recipient
     await store.deleteSession(address);
     await store.deleteIdentity(address);
-    print('🗑️ Session and Identity cleared for $recipientUserId');
+    
+    // Also force a re-init of our own keys to be safe
+    try {
+      await SecurityService().initializeKeys();
+    } catch (_) {}
+    
+    print('🗑️ Session and Identity cleared for $recipientUserId. Next message will be a fresh handshake.');
   }
 }

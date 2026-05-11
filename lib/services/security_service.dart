@@ -35,28 +35,30 @@ class SecurityService {
   static const String _signedPreKeyTimestampKey = 'signal_signed_pre_key_timestamp';
 
   /// Initialize and generate keys if they don't exist for the current user.
-  Future<void> initializeKeys() async {
-    // FIX Bug 19: Resolve the current user FIRST so all subsequent key operations
-    // are namespaced correctly. If there's no logged-in user, fail loudly.
+  Future<void> initializeKeys({bool force = false}) async {
     final user = await AuthService().loadUser();
     if (user == null) throw Exception('SecurityService.initializeKeys: no authenticated user');
     _currentUserId = user.id;
 
     final existingId = await _storage.read(key: _prefixed(_registrationIdKey));
-    if (existingId == null) {
+    if (existingId == null || force) {
+      print('🔐 ${force ? "Force refreshing" : "Generating"} security keys for user: ${user.id}');
       await _generateAndUploadNewKeys();
     } else {
-      // Periodic check for replenishment - Run in background, don't block startup
       unawaited(checkAndReplenishPreKeys());
     }
 
-    // Generate DB encryption key if missing (also per-user namespaced)
     final dbKey = await _storage.read(key: _prefixed(_dbEncryptionKey));
     if (dbKey == null) {
       final random = Random.secure();
       final keyBytes = Uint8List.fromList(List.generate(32, (_) => random.nextInt(256)));
       await _storage.write(key: _prefixed(_dbEncryptionKey), value: base64Encode(keyBytes));
     }
+  }
+
+  /// Forces a complete wipe and regeneration of keys — fixes 'reset loop' issues.
+  Future<void> forceRefreshKeys() async {
+    await initializeKeys(force: true);
   }
 
   Future<String?> getDatabaseKey() async {
@@ -67,6 +69,12 @@ class SecurityService {
     }
     if (_currentUserId == null) return null;
     return await _storage.read(key: _prefixed(_dbEncryptionKey));
+  }
+
+  /// Clears the cached user context — call this on logout.
+  void reset() {
+    _currentUserId = null;
+    print('🔄 SecurityService reset');
   }
 
   Future<void> _generateAndUploadNewKeys() async {

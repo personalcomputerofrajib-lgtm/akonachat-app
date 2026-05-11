@@ -113,9 +113,9 @@ class AuthService {
   }
 
   /// Sign out
-  Future<void> signOut() async {
-    // 1. Reset session so next login starts with clean state
+    // 1. Reset services so next login starts with clean state
     SessionService().reset();
+    SecurityService().reset();
     // 2. Clear any pending outgoing messages (they use the old session's keys)
     await MessageQueue().clear();
     // 3. Close the encrypted local database to prevent cross-account leaks
