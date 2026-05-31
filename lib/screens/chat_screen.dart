@@ -650,17 +650,10 @@ class _ChatScreenState extends State<ChatScreen> {
       await DatabaseService().saveMessage(msg);
     } catch (e) {
       print('Encryption Error: $e');
-      final isNoKey = e.toString().contains('no security keys') || e.toString().contains('security key');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isNoKey
-                ? 'This user hasn\'t set up encryption yet. Ask them to open the app.'
-                : 'Secure send failed. Tap \'Reset Secure Session\' in the menu to fix.'),
-            action: isNoKey ? null : SnackBarAction(
-              label: 'Reset',
-              onPressed: _resetSecureSession,
-            ),
+            content: Text('Send failed: $e'),
             duration: Duration(seconds: 5),
           )
         );
@@ -1355,21 +1348,16 @@ class _ChatScreenState extends State<ChatScreen> {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            if (!isDeleted && !isDecryptionError)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6.0, bottom: 2.0),
-                                child: Icon(Icons.lock, size: 12, color: isMe ? Colors.white70 : (isCyber ? Colors.cyan : Colors.grey)),
-                              ),
-                            Flexible(
-                              child: Text(
-                                text,
-                                style: TextStyle(
-                                  color: isDecryptionError ? Colors.redAccent : (isMe ? Colors.white : (isCyber ? Colors.white : Colors.black)),
-                                  fontStyle: isDeleted || isDecryptionError ? FontStyle.italic : FontStyle.normal,
-                                  fontSize: 16,
+                              Flexible(
+                                child: Text(
+                                  text,
+                                  style: TextStyle(
+                                    color: (isMe ? Colors.white : (isCyber ? Colors.white : Colors.black)),
+                                    fontStyle: isDeleted ? FontStyle.italic : FontStyle.normal,
+                                    fontSize: 16,
+                                  ),
                                 ),
                               ),
-                            ),
                             if (isMe) ...[
                               const SizedBox(width: 4),
                               Icon(
@@ -1710,65 +1698,8 @@ class _ChatScreenState extends State<ChatScreen> {
           icon: Icon(Icons.palette_outlined),
           onPressed: _showCustomizationMenu,
         ),
-        PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'reset_session') {
-              _resetSecureSession();
-            }
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: 'reset_session',
-              child: Row(
-                children: [
-                  Icon(Icons.security_update_warning, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('Reset Secure Session'),
-                ],
-              ),
-            ),
-          ],
-        ),
       ],
     );
-  }
-
-  Future<void> _resetSecureSession() async {
-    if (_otherUser == null) return;
-    
-    bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Reset Secure Session?'),
-        content: Text('This will clear the current encryption state with this user. Use this only if messages are failing to decrypt.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true), 
-            child: Text('Reset', style: TextStyle(color: Colors.red))
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Repairing secure connection...'), duration: Duration(seconds: 2))
-      );
-      
-      // 1. Clear local session for this recipient
-      await _sessionService.resetSession(_otherUser!.id);
-      
-      // 2. FORCE REGENERATE and re-upload our own keys.
-      // This tells the other person "I have a new identity, throw away my old keys".
-      await _securityService.forceRefreshKeys();
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Secure connection repaired! Try sending a message now.'))
-        );
-      }
-    }
   }
 }
 
