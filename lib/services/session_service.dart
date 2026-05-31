@@ -139,7 +139,7 @@ class SessionService {
     
     // Also force a re-init of our own keys to be safe
     try {
-      await SecurityService().initializeKeys();
+      await SecurityService().forceRefreshKeys();
     } catch (_) {}
     
     print('🗑️ Session and Identity cleared for $recipientUserId. Next message will be a fresh handshake.');

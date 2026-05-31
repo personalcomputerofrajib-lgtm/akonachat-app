@@ -101,6 +101,14 @@ class SecurityService {
       value: base64Encode(signedPreKey.serialize()),
     );
 
+    // Save all one-time pre-keys to local storage
+    for (var preKey in oneTimePreKeys) {
+      await _storage.write(
+        key: '${_currentUserId!}_signal_prekey_${preKey.id}',
+        value: base64Encode(preKey.serialize()),
+      );
+    }
+
     // 5. Upload Public Bundle to Server
     await _uploadBundle(identityKeyPair, registrationId, signedPreKey, oneTimePreKeys);
   }
@@ -235,6 +243,13 @@ class SecurityService {
           final oneTimePreKeys = generatePreKeys(lastId + 1, 50);
           final newLastId = lastId + 50;
           await _storage.write(key: _prefixed(_lastPreKeyIdKey), value: newLastId.toString());
+
+          for (var preKey in oneTimePreKeys) {
+            await _storage.write(
+              key: '${_currentUserId!}_signal_prekey_${preKey.id}',
+              value: base64Encode(preKey.serialize()),
+            );
+          }
 
           // Upload to server (Appends)
           await _uploadBundle(identityKeyPair, registrationId, signedPreKey, oneTimePreKeys);
